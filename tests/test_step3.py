@@ -9,7 +9,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from step1_vectorize import main as step1_main  # noqa: E402
 from step2_cluster import main as step2_main  # noqa: E402
-from step3_keywords import main as step3_main, validate_names  # noqa: E402
+from step3_keywords import main as step3_main, name_sources, validate_names  # noqa: E402
+
+
+def test_name_sources():
+    assert name_sources(["a", "x"], ["a", "b"]) == ["採用建議", "自訂"]
+    assert name_sources(["a", "b"], None) == ["自訂", "自訂"]
 
 
 @pytest.fixture(scope="module")
@@ -56,7 +61,17 @@ def test_names_file(out, tmp_path):
     f.write_text(json.dumps(["一", "二", "三"], ensure_ascii=False), encoding="utf-8")
     step3_main(["--k", "3", "--names-file", str(f), "--out", str(out)])
     saved = json.loads((out / "work" / "step3" / "names.json").read_text(encoding="utf-8"))
-    assert saved == {"k": 3, "names": ["一", "二", "三"]}
+    assert saved["names"] == ["一", "二", "三"] and saved["sources"] == ["自訂"] * 3
+
+
+def test_suggestions_record_sources(out):
+    step3_main(["--k", "3", "--names", "甲", "自填", "丙",
+                "--suggestions", "甲", "乙", "丙", "--out", str(out)])
+    saved = json.loads((out / "work" / "step3" / "names.json").read_text(encoding="utf-8"))
+    assert saved["suggestions"] == ["甲", "乙", "丙"]
+    assert saved["sources"] == ["採用建議", "自訂", "採用建議"]
+    with pytest.raises(SystemExit, match="需要 3 個建議名稱"):
+        step3_main(["--k", "3", "--names", "a", "b", "c", "--suggestions", "a", "--out", str(out)])
 
 
 def test_missing_k_and_wrong_name_count(out):

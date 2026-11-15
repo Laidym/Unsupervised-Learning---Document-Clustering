@@ -1,12 +1,14 @@
 """步驟 3　群關鍵詞與命名。
 
 依使用者在檢查點 2 選定的 k，取步驟 2 的分群結果，以 c-TF-IDF 列出每群前 10 個關鍵詞。
-skill 不自動命名；使用者命名後以 --names（或 --names-file）再執行一次，寫出結果檔。
+Claude 依關鍵詞為每群提出建議名稱，使用者逐群採用或自訂；確定後以 --names 再執行一次，
+寫出結果檔。同時傳入 --suggestions 時，會記錄每個名稱是「採用建議」還是「自訂」。
 
 用法：
   python scripts/step3_keywords.py --k 7
-  python scripts/step3_keywords.py --k 7 --names 名稱0 名稱1 ...
-  python scripts/step3_keywords.py --k 7 --names-file names.json   （JSON 字串陣列，依群編號排列）
+  python scripts/step3_keywords.py --k 7 --names 名稱0 名稱1 ... [--suggestions 建議0 建議1 ...]
+  python scripts/step3_keywords.py --k 7 --names-file names.json [--suggestions-file sugg.json]
+  （JSON 字串陣列，依群編號排列）
 """
 import argparse
 import json
@@ -32,14 +34,29 @@ def cluster_keywords(counts, labels, k, vocab):
     } for c, kw in enumerate(top_terms(counts, labels, k, vocab))]
 
 
-def validate_names(names, k):
+def validate_names(names, k, what="群名稱"):
     names = [str(s).strip() for s in names]
     if len(names) != k:
-        raise ValueError(f"需要 {k} 個群名稱，收到 {len(names)} 個。")
+        raise ValueError(f"需要 {k} 個{what}，收到 {len(names)} 個。")
     if any(not s for s in names):
-        raise ValueError("群名稱不可為空白。")
+        raise ValueError(f"{what}不可為空白。")
     dup = sorted({s for s in names if names.count(s) > 1})
     return names, dup
+
+
+def name_sources(names, suggestions):
+    """名稱與建議相同記為「採用建議」，否則為「自訂」；沒有建議時全部為「自訂」。"""
+    if suggestions is None:
+        return ["自訂"] * len(names)
+    return ["採用建議" if n == s else "自訂" for n, s in zip(names, suggestions)]
+
+
+def _read_list(inline, path):
+    if inline is not None:
+        return inline
+    if path is not None:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    return None
 
 
 def print_keywords(k, rows, n):
@@ -57,6 +74,9 @@ def main(argv=None):
     names_src = ap.add_mutually_exclusive_group()
     names_src.add_argument("--names", nargs="+", help="依群編號排列的群名稱")
     names_src.add_argument("--names-file", help="JSON 字串陣列，依群編號排列")
+    sugg_src = ap.add_mutually_exclusive_group()
+    sugg_src.add_argument("--suggestions", nargs="+", help="提供給使用者的建議名稱，用來記錄名稱來源")
+    sugg_src.add_argument("--suggestions-file", help="建議名稱的 JSON 字串陣列")
     ap.add_argument("--out", default=str(DEFAULT_OUT))
     args = ap.parse_args(argv)
 
@@ -92,16 +112,19 @@ def main(argv=None):
         if names_path.exists():
             names_path.unlink()            # k 或分群可能已改變，舊名稱作廢
         print()
-        print("請依關鍵詞為各群命名（依群編號順序），再以 --names 執行一次。")
+        print("請為各群提出建議名稱，由使用者逐群採用或自訂後，再以 --names（及 --suggestions）執行一次。")
         return
 
-    raw = args.names if args.names is not None else json.loads(
-        Path(args.names_file).read_text(encoding="utf-8"))
+    raw = _read_list(args.names, args.names_file)
+    raw_sugg = _read_list(args.suggestions, args.suggestions_file)
     try:
         names, dup = validate_names(raw, args.k)
+        suggestions = None if raw_sugg is None else validate_names(raw_sugg, args.k, "建議名稱")[0]
     except ValueError as e:
         sys.exit(str(e))
-    save_json({"k": args.k, "names": names}, wd / "names.json")
+    sources = name_sources(names, suggestions)
+    save_json({"k": args.k, "names": names, "suggestions": suggestions, "sources": sources},
+              wd / "names.json")
 
     clusters = docs.assign(cluster=labels, 群名稱=[names[c] for c in labels])
     clusters.to_csv(out / "clusters.csv", index=False, encoding="utf-8-sig")
@@ -114,8 +137,8 @@ def main(argv=None):
 
     print()
     print("群名稱：")
-    for c, s in enumerate(names):
-        print(f"  群 {c}：{s}")
+    for c, (s, src) in enumerate(zip(names, sources)):
+        print(f"  群 {c}：{s}（{src}）")
     if dup:
         print(f"注意：有重複的群名稱（{'、'.join(dup)}），可考慮合併或改名。")
     print()

@@ -3,14 +3,14 @@
 固定設定：語言自動判斷；英文先移除 email、網址與主機名稱，依空白、標點與數字切分，
 去除內建英文停用詞（含縮寫殘片）；
 TF-IDF → Truncated SVD（100 維，文件數 ≤ 100 時為 n − 1）→ 長度正規化。
-可選設定：詞彙篩選（min_df、max_df 或不篩選）、詞組範圍（單詞或單詞＋雙詞）。
+可選設定：詞彙篩選（min_df、max_df 或不篩選；min_df 預設依文件數：< 1,000 篇為 2，否則為 5）、詞組範圍（單詞或單詞＋雙詞）。
 
 輸出至 <out>/work/step1/，並印出檢查點 1 摘要。標籤只原樣存檔供步驟 4 使用。
 
 用法：
   python scripts/step1_vectorize.py --dataset 20ng
   python scripts/step1_vectorize.py --input reviews.csv --text-col 內容 [--label-col 類別]
-  可加 --min-df 2、--no-filter、--ngram 2
+  可加 --min-df 5、--no-filter、--ngram 2
 """
 import argparse
 import re
@@ -29,7 +29,7 @@ from sklearn.feature_extraction.text import (
 from sklearn.preprocessing import normalize
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import DATA_20NG, DEFAULT_OUT, SEED, load_docs, save_json, setup_stdout, work_dir  # noqa: E402
+from common import DATA_20NG, DEFAULT_OUT, SEED, load_docs, load_json, save_json, setup_stdout, work_dir  # noqa: E402
 
 SVD_DIM = 100
 ZH_THRESHOLD = 0.3
@@ -120,30 +120,72 @@ def vectorize(texts, lang, min_df=5, max_df=0.95, ngram_max=1, seed=SEED):
     }
 
 
-def summarize(docs, counts, vocab, top_n=20):
+SMALL_CORPUS = 1000           # 文件數少於此值時，min_df 預設為 2
+MIN_DF_DEFAULT, MIN_DF_SMALL = 5, 2
+
+
+def default_min_df(n_docs):
+    return MIN_DF_SMALL if n_docs < SMALL_CORPUS else MIN_DF_DEFAULT
+
+
+def _top_terms_table(counts, vocab, idx, top_n):
     term_total = np.asarray(counts.sum(axis=0)).ravel()
     term_df = np.asarray((counts > 0).sum(axis=0)).ravel()
-    order = np.argsort(-term_total, kind="stable")[:top_n]
-    top = [
+    idx = np.asarray(idx)
+    order = idx[np.argsort(-term_total[idx], kind="stable")[:top_n]]
+    return [
         {"詞": vocab[i], "總次數": int(term_total[i]), "出現篇數": int(term_df[i]),
          "出現比例": round(term_df[i] / counts.shape[0], 3)}
         for i in order
     ]
+
+
+def summarize(docs, counts, vocab, top_n=20, top_bigrams=15):
     raw_len = docs["text"].str.split().str.len()
     eff_len = np.asarray(counts.sum(axis=1)).ravel()
-    return {
+    bigram_idx = [i for i, t in enumerate(vocab) if " " in t]
+    out = {
         "文件數": int(counts.shape[0]),
         "詞彙量": len(vocab),
+        "雙詞數": len(bigram_idx),
         "平均原始詞數": round(float(raw_len.mean()), 1),
         "原始詞數中位數": float(raw_len.median()),
         "平均有效詞數": round(float(eff_len.mean()), 1),
         "有效詞數中位數": float(np.median(eff_len)),
         "有效詞數少於 5 的文件": int((eff_len < 5).sum()),
-        "最高頻詞": top,
+        "最高頻詞": _top_terms_table(counts, vocab, np.arange(len(vocab)), top_n),
     }
+    if bigram_idx:
+        out["最高頻雙詞"] = _top_terms_table(counts, vocab, bigram_idx, top_bigrams)
+    return out
 
 
-def print_checkpoint(load_stats, lang, ratio, settings, info, summary, n_dropped):
+def settings_text(settings):
+    filt = ("不篩選" if settings["min_df"] == 1 and settings["max_df"] == 1.0
+            else f"min_df={settings['min_df']}、max_df={settings['max_df']}")
+    ngram = "單詞" if settings["ngram_max"] == 1 else "單詞＋雙詞"
+    return f"{filt}；{ngram}"
+
+
+def comparison_table(prev, cur):
+    """上一次與本次執行的對照表；prev 為 None 時回傳 None。"""
+    if prev is None:
+        return None
+    rows = []
+    for tag, (cfg, summ) in (("上一次", prev), ("本次", cur)):
+        rows.append({
+            "": tag,
+            "設定": settings_text(cfg),
+            "詞彙量": summ["詞彙量"],
+            "平均有效詞數": summ["平均有效詞數"],
+            "有效詞數中位數": f"{summ['有效詞數中位數']:g}",
+            "有效詞數<5": summ["有效詞數少於 5 的文件"],
+            "排除文件": len(cfg.get("dropped_no_terms", [])),
+        })
+    return pd.DataFrame(rows)
+
+
+def print_checkpoint(load_stats, lang, ratio, settings, info, summary, n_dropped, compare=None):
     lang_name = {"en": "英文", "zh": "中文"}[lang]
     print("=" * 60)
     print("檢查點 1　詞彙摘要")
@@ -153,23 +195,30 @@ def print_checkpoint(load_stats, lang, ratio, settings, info, summary, n_dropped
     if n_dropped:
         print(f"另有 {n_dropped} 篇文件在詞彙篩選後沒有任何詞，已排除。")
     print(f"語言判斷：{lang_name}（中文字元比例 {ratio:.1%}）")
-    filt = ("不篩選" if settings["min_df"] == 1 and settings["max_df"] == 1.0
-            else f"min_df={settings['min_df']}、max_df={settings['max_df']}")
-    ngram = "單詞" if settings["ngram_max"] == 1 else "單詞＋雙詞"
-    print(f"目前設定：詞彙篩選 {filt}；詞組範圍 {ngram}")
+    print(f"目前設定：{settings_text(settings)}")
+    if settings.get("min_df_auto"):
+        print(f"（min_df 依文件數自動設定：文件數 < {SMALL_CORPUS:,} 篇用 {MIN_DF_SMALL}，"
+              f"否則用 {MIN_DF_DEFAULT}）")
     print()
     print(f"文件數：{summary['文件數']}")
-    print(f"詞彙量：{summary['詞彙量']}")
+    bi = f"（其中雙詞 {summary['雙詞數']}）" if summary["雙詞數"] else ""
+    print(f"詞彙量：{summary['詞彙量']}{bi}")
     print(f"平均文件長度：原始 {summary['平均原始詞數']} 詞（中位數 {summary['原始詞數中位數']:g}）；"
           f"去除停用詞與篩選後 {summary['平均有效詞數']} 詞（中位數 {summary['有效詞數中位數']:g}）")
     print(f"SVD 降至 {info['svd_dim']} 維。")
     print()
     print("最高頻詞（依總次數）：")
     print(pd.DataFrame(summary["最高頻詞"]).to_string(index=False))
+    if "最高頻雙詞" in summary:
+        print()
+        print("最高頻雙詞（依總次數）：")
+        print(pd.DataFrame(summary["最高頻雙詞"]).to_string(index=False))
+    if compare is not None:
+        print()
+        print("與上一次執行比較：")
+        print(compare.to_string(index=False))
 
     notes = []
-    if summary["文件數"] < 1000 and settings["min_df"] >= 5:
-        notes.append("文件數不到 1,000 篇，min_df=5 可能刪除較多詞；可考慮改為 min_df=2。")
     if summary["有效詞數少於 5 的文件"]:
         notes.append(f"有 {summary['有效詞數少於 5 的文件']} 篇文件的有效詞數少於 5，分群依據較少。")
     if summary["文件數"] < 60:
@@ -179,6 +228,16 @@ def print_checkpoint(load_stats, lang, ratio, settings, info, summary, n_dropped
         print("提示：")
         for s in notes:
             print(f"- {s}")
+
+
+def _load_previous(wd, path):
+    """讀取同一份資料上一次的設定與摘要；資料不同或不存在時回傳 None。"""
+    try:
+        cfg = load_json(wd / "config.json")
+        summ = load_json(wd / "summary.json")
+    except (FileNotFoundError, ValueError):
+        return None
+    return (cfg, summ) if cfg.get("input") == str(path) else None
 
 
 def main(argv=None):
@@ -191,7 +250,8 @@ def main(argv=None):
     ap.add_argument("--label-col", help="標籤欄位（只用於步驟 4 事後比對）")
     ap.add_argument("--id-col", help="文件編號欄位（可省略）")
     ap.add_argument("--categories", nargs="+", help="只取這些類別（20ng 用）")
-    ap.add_argument("--min-df", type=int, default=5)
+    ap.add_argument("--min-df", type=int,
+                    help=f"省略時依文件數自動設定（< {SMALL_CORPUS} 篇為 {MIN_DF_SMALL}，否則為 {MIN_DF_DEFAULT}）")
     ap.add_argument("--max-df", type=float, default=0.95)
     ap.add_argument("--no-filter", action="store_true", help="不篩選詞彙")
     ap.add_argument("--ngram", type=int, choices=[1, 2], default=1, help="1＝單詞；2＝單詞＋雙詞")
@@ -205,10 +265,15 @@ def main(argv=None):
             ap.error("使用 --input 時必須指定 --text-col")
         path, text_col, label_col, id_col = args.input, args.text_col, args.label_col, args.id_col
 
-    min_df, max_df = (1, 1.0) if args.no_filter else (args.min_df, args.max_df)
-    settings = {"min_df": min_df, "max_df": max_df, "ngram_max": args.ngram}
-
     docs, load_stats = load_docs(path, text_col, label_col, id_col, args.categories)
+    if args.no_filter:
+        min_df, max_df, auto = 1, 1.0, False
+    elif args.min_df is None:
+        min_df, max_df, auto = default_min_df(len(docs)), args.max_df, True
+    else:
+        min_df, max_df, auto = args.min_df, args.max_df, False
+    settings = {"min_df": min_df, "max_df": max_df, "ngram_max": args.ngram, "min_df_auto": auto}
+
     lang, ratio = detect_language(docs["text"].tolist())
     info = vectorize(docs["text"].tolist(), lang, min_df, max_df, args.ngram)
 
@@ -217,6 +282,7 @@ def main(argv=None):
     summary = summarize(docs, info["counts"], info["vocab"])
 
     wd = work_dir(args.out, "step1")
+    previous = _load_previous(wd, path)
     docs[["doc_id", "text"]].to_csv(wd / "docs.csv", index=False, encoding="utf-8")
     labels_path = wd / "labels.csv"
     if "label" in docs.columns:
@@ -226,7 +292,7 @@ def main(argv=None):
     sparse.save_npz(wd / "counts.npz", info["counts"])
     np.save(wd / "vectors.npy", info["vectors"])
     save_json(info["vocab"], wd / "vocab.json")
-    save_json({
+    config = {
         "input": str(path),
         "text_col": text_col,
         "label_col": label_col,
@@ -242,10 +308,12 @@ def main(argv=None):
         "seed": SEED,
         "load_stats": load_stats,
         "dropped_no_terms": dropped["doc_id"].tolist(),
-    }, wd / "config.json")
+    }
+    save_json(config, wd / "config.json")
     save_json(summary, wd / "summary.json")
 
-    print_checkpoint(load_stats, lang, ratio, settings, info, summary, len(dropped))
+    compare = comparison_table(previous, (config, summary))
+    print_checkpoint(load_stats, lang, ratio, settings, info, summary, len(dropped), compare)
     print()
     print(f"中間結果已存於 {wd}")
 

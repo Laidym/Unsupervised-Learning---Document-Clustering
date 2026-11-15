@@ -37,6 +37,8 @@ def test_data_limits():
     assert any("群 3（8 篇）" in s for s in _limits(sizes=[300, 300, 192, 8]))
     assert any("差異大" in s for s in _limits(sizes=[520, 100, 100, 80], k=4))
     assert any("群 1" in s for s in _limits(npmi_per=[0.3, -0.1, 0.2, 0.2]))
+    low = _limits(npmi_per=[0.45, 0.38, 0.18, 0.37])     # 平均 0.345，群 2 低於平均 0.1 以上
+    assert any("群 2（0.180）" in s for s in low) and not any("群 1" in s for s in low)
     assert any("上限" in s for s in _limits(k=15, sizes=[50] * 15 + [50]))
     assert any("未納入" in s for s in _limits(n_dropped=3))
 
@@ -55,6 +57,7 @@ def test_with_labels(tmp_path, capsys):
     assert (m["範圍"] == "整體").sum() == 5
     report = (tmp_path / "report.md").read_text(encoding="utf-8")
     assert "ARI" in report and "交叉表" in report and "隨機種子：42" in report
+    assert "名稱來源" in report
 
 
 def test_without_labels(tmp_path):

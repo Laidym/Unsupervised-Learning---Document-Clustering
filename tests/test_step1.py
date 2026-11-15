@@ -7,7 +7,32 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from common import load_docs  # noqa: E402
-from step1_vectorize import clean_en, detect_language, main, svd_dim, vectorize  # noqa: E402
+from step1_vectorize import (  # noqa: E402
+    clean_en, default_min_df, detect_language, main, summarize, svd_dim, vectorize,
+)
+
+
+def test_default_min_df():
+    assert default_min_df(800) == 2
+    assert default_min_df(1000) == 5
+
+
+def test_summary_lists_bigrams_only_when_present():
+    docs = pd.DataFrame({"text": TEXTS})
+    uni = vectorize(TEXTS, "en", min_df=1, max_df=1.0)
+    assert "最高頻雙詞" not in summarize(docs, uni["counts"], uni["vocab"])
+    bi = vectorize(TEXTS, "en", min_df=1, max_df=1.0, ngram_max=2)
+    s = summarize(docs, bi["counts"], bi["vocab"])
+    assert s["雙詞數"] > 0 and all(" " in r["詞"] for r in s["最高頻雙詞"])
+
+
+def test_rerun_prints_comparison_and_auto_min_df(tmp_path, capsys):
+    main(["--dataset", "20ng", "--out", str(tmp_path)])
+    first = capsys.readouterr().out
+    assert "min_df=2" in first and "自動設定" in first and "與上一次執行比較" not in first
+    main(["--dataset", "20ng", "--min-df", "5", "--out", str(tmp_path)])
+    second = capsys.readouterr().out
+    assert "與上一次執行比較" in second and "自動設定" not in second
 
 
 def test_clean_en_removes_addresses_keeps_filenames():

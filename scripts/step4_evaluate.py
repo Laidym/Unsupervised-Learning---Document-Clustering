@@ -26,13 +26,14 @@ FIXED_LIMITS = [
     "每篇文件只能屬於一群；同時涉及多個主題的文件會被歸入單一群。",
     "詞袋表示忽略詞序與語意，同義詞視為不同的詞。",
     "群數沒有唯一正確答案，指標僅供參考。",
-    "群名稱由使用者根據關鍵詞判斷，非模型產出。",
+    "群名稱由使用者根據關鍵詞決定（可採用 skill 依關鍵詞提出的建議名稱），並非分群模型產出。",
 ]
 
 SHORT_DOC_MEDIAN = 10          # 有效詞數中位數低於此值視為文件過短
 SMALL_CLUSTER_MIN = 10         # 文件數少於此值的群
 SMALL_CLUSTER_RATIO = 0.3      # 或少於平均群大小的此比例
 UNEVEN_RATIO = 5               # 最大群／最小群超過此倍數
+NPMI_GAP = 0.1                 # 群的 NPMI 低於各群平均超過此值
 
 
 def purity(clusters, labels):
@@ -63,10 +64,14 @@ def data_limits(*, n, k, sizes, npmi_per, silhouette, eff_median, n_dropped, k_r
     if min(sizes) > 0 and max(sizes) / min(sizes) > UNEVEN_RATIO:
         notes.append(f"各群大小差異大（最大 {max(sizes)} 篇、最小 {min(sizes)} 篇），"
                      "c-TF-IDF 對小群的關鍵詞較不穩定。")
-    low = [c for c, v in enumerate(npmi_per) if np.isfinite(v) and v < 0]
-    if low:
-        notes.append("以下群的關鍵詞一致性為負，關鍵詞較少一起出現，命名需謹慎："
-                     + "、".join(f"群 {c}" for c in low) + "。")
+    vals = np.asarray(npmi_per, dtype=float)
+    if np.isfinite(vals).any():
+        mean = float(np.nanmean(vals))
+        low = [c for c, v in enumerate(vals) if np.isfinite(v) and (v < 0 or v < mean - NPMI_GAP)]
+        if low:
+            desc = "、".join(f"群 {c}（{vals[c]:.3f}）" for c in low)
+            notes.append(f"以下群的關鍵詞一致性明顯偏低（各群平均 {mean:.3f}）：{desc}。"
+                         "這些關鍵詞較少在同一文件一起出現，群的內容可能較混雜，命名需謹慎。")
     if silhouette < 0.1:
         notes.append(f"silhouette 為 {silhouette:.3f}，群與群之間界線不明顯。"
                      "這在高維文字資料很常見，但表示不少文件位於兩群交界。")
@@ -181,9 +186,11 @@ def main(argv=None):
         crosstab = pd.crosstab(pd.Series([f"{c} {names[c]}" for c in clusters], name="群"),
                                pd.Series(y, name="標籤"))
 
+    sources = names_info.get("sources") or ["自訂"] * k
     cluster_table = pd.DataFrame({
         "群": range(k),
         "群名稱": names,
+        "名稱來源": sources,
         "文件數": sizes,
         "NPMI": [float(v) for v in npmi_per],
         "關鍵詞": [", ".join(c["keywords"]) for c in kw["clusters"]],
