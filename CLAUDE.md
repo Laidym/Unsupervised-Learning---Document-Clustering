@@ -19,7 +19,7 @@
 固定設定：
 
 - 語言：依中文字元比例自動判斷。
-- 中文：jieba 精確模式斷詞＋內建中文停用詞。英文：依空白與標點切分＋內建英文停用詞。
+- 中文：jieba 精確模式斷詞＋內建中文停用詞。英文：先移除 email、網址、主機名稱（只認 edu/com/org/net/gov/mil 結尾，避免誤刪檔名），依空白、標點與數字切分（只留 ≥ 2 個字母的詞），內建英文停用詞（scikit-learn 清單＋縮寫殘片 don、ve 等）。
 - TF-IDF 加權 → Truncated SVD 降至 100 維（文件數 ≤ 100 時改為 n − 1）→ 向量長度正規化為 1。
 - 20 Newsgroups 一律移除 headers、footers、quotes。
 
@@ -61,7 +61,7 @@
 - **c-TF-IDF**（Grootendorst 2022）：每群文件合併為一份；`W[t,c] = tf[t,c] * log(1 + A / f[t])`。`tf[t,c]` 為詞 t 在群 c 的次數（依群總詞數正規化），`A` 為每群平均詞數，`f[t]` 為詞 t 在所有群的總次數。用原始詞頻計數（CountVectorizer），詞彙與 TF-IDF 相同。
 - **NPMI**（Bouma 2009；Newman et al. 2010）：以「文件內是否共同出現」估計機率，資料為本次語料。每群前 10 個關鍵詞兩兩計算 `NPMI = log(p(i,j) / (p(i) p(j))) / (−log p(i,j))`；`p(i,j) = 0` 時記為 −1。先對群內所有詞對取平均，再對所有群取平均。
 - **silhouette**：`sklearn.metrics.silhouette_score(D, labels, metric="precomputed")`，D 為 cosine 距離矩陣。文字資料數值通常偏低，報告須說明只宜比較相對高低。
-- **k-medoids**：自行實作，不依賴 `kmedoids` 或 `scikit-learn-extra`（沙盒沒有）。可用 k-medoids++ 初始化加交替更新，多次初始化取總成本最低者；若時間允許可實作 FasterPAM（Schubert & Rousseeuw 2021）。說明文件引用的是 PAM／FasterPAM，若實作不同須同步修正文件。
+- **k-medoids**：自行實作於 `scripts/kmedoids.py`，不依賴 `kmedoids` 或 `scikit-learn-extra`（沙盒沒有）。已實作 k-medoids++ 初始化＋FasterPAM 交換（Schubert & Rousseeuw 2021），5 次初始化取總成本最低者；群編號依 medoid 文件索引排序。
 - **球面 k-means**：在正規化向量上用 `sklearn.cluster.KMeans`，近似球面 k-means（Dhillon & Modha 2001）。
 - **事後比對**：`adjusted_rand_score`、`normalized_mutual_info_score`；純度自行計算（每群取多數標籤，加總後除以 n）。
 
