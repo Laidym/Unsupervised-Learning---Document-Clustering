@@ -4,7 +4,7 @@
 畫在同一張圖，並列出各 k 的群關鍵詞，供檢查點 2 選定群數。不讀取標籤。
 
 用法：
-  python scripts/step2_cluster.py [--k-min 2 --k-max 15] [--out output]
+  python scripts/step2_cluster.py [--algorithm kmedoids|spherical|hierarchical] [--k-min 2 --k-max 15] [--out output]
 """
 import argparse
 import sys
@@ -13,20 +13,20 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from sklearn.metrics import silhouette_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import DEFAULT_OUT, SEED, load_json, save_json, setup_stdout, work_dir  # noqa: E402
-from kmedoids import cosine_distance_matrix, kmedoids  # noqa: E402
+from clustering import (  # noqa: E402
+    ALGORITHMS, KMEDOIDS_MAX, LARGE_N_WARNING, N_INIT, needs_distance_matrix, run_clustering, silhouette,
+    suggest_algorithm,
+)
+from common import DEFAULT_OUT, SEED, cjk_font, load_json, save_json, setup_stdout, work_dir  # noqa: E402
+from hierarchical import build_linkage, cluster_linkage, plot_dendrogram  # noqa: E402
+from kmedoids import cosine_distance_matrix  # noqa: E402
 from textmetrics import cluster_npmi, top_terms  # noqa: E402
 
 K_CAP = 15
 DOCS_PER_CLUSTER = 30
-N_INIT = 5
-KMEDOIDS_SUGGEST_MAX = 5000
 
-CJK_FONTS = ["Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", "PingFang TC",
-             "Heiti TC", "Noto Sans CJK JP", "Noto Sans CJK SC", "WenQuanYi Zen Hei", "SimHei"]
 
 
 def default_k_range(n):
@@ -35,10 +35,10 @@ def default_k_range(n):
     return (2, k_max) if k_max >= 2 else None
 
 
-def run_k(D, counts, vocab, k, seed=SEED, n_init=N_INIT):
-    res = kmedoids(D, k, seed=seed, n_init=n_init)
+def run_k(vectors, D, counts, vocab, k, algorithm, seed=SEED, n_init=N_INIT, L=None):
+    res = run_clustering(vectors, k, algorithm, D=D, seed=seed, n_init=n_init, L=L)
     labels = res["labels"]
-    sil = float(silhouette_score(D, labels, metric="precomputed"))
+    sil, _ = silhouette(vectors, labels, D=D, seed=seed)
     kw = top_terms(counts, labels, k, vocab)
     npmi, npmi_per = cluster_npmi(counts, [c["index"] for c in kw])
     return {
@@ -54,19 +54,13 @@ def run_k(D, counts, vocab, k, seed=SEED, n_init=N_INIT):
     }
 
 
-def _cjk_font():
-    from matplotlib import font_manager
-    names = {f.name for f in font_manager.fontManager.ttflist}
-    return next((f for f in CJK_FONTS if f in names), None)
-
-
 def plot_k_selection(metrics, path):
     """silhouette 與 NPMI 尺度不同，上下兩格共用 k 軸（不用雙 y 軸）。"""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    font = _cjk_font()
+    font = cjk_font()
     if font:
         plt.rcParams["font.family"] = [font, "sans-serif"]
     zh = font is not None
@@ -102,11 +96,11 @@ def plot_k_selection(metrics, path):
     return zh
 
 
-def print_checkpoint(n, k_range, metrics, results, png, zh_font):
+def print_checkpoint(n, k_range, metrics, results, png, zh_font, algorithm, sampled):
     print("=" * 60)
     print("檢查點 2　選定群數")
     print("=" * 60)
-    print(f"文件數 {n}；分群演算法 k-medoids（FasterPAM，{N_INIT} 次初始化取成本最低，seed={SEED}）")
+    print(f"文件數 {n}；分群演算法 {ALGORITHMS[algorithm]}，{N_INIT} 次初始化取成本最低，seed={SEED}")
     print(f"候選群數 k = {k_range[0]} .. {k_range[1]}")
     print()
     tbl = metrics[["k", "silhouette", "npmi", "min_size", "max_size"]].rename(columns={
@@ -122,6 +116,8 @@ def print_checkpoint(n, k_range, metrics, results, png, zh_font):
             print(f"  群 {c}（{size} 篇）：{', '.join(terms)}")
 
     notes = ["silhouette 在文字資料通常偏低，只宜比較不同 k 的相對高低。"]
+    if sampled:
+        notes.append("文件數超過 5,000 篇，silhouette 以隨機抽樣 5,000 篇計算（seed 固定）。")
     best_sil = int(metrics.loc[metrics["silhouette"].idxmax(), "k"])
     best_npmi = int(metrics.loc[metrics["npmi"].idxmax(), "k"])
     notes.append(f"silhouette 最高在 k = {best_sil}；NPMI 最高在 k = {best_npmi}。")
@@ -142,7 +138,8 @@ def print_checkpoint(n, k_range, metrics, results, png, zh_font):
 def main(argv=None):
     setup_stdout()
     ap = argparse.ArgumentParser(description="步驟 2　文件分群")
-    ap.add_argument("--algorithm", choices=["kmedoids"], default="kmedoids")
+    ap.add_argument("--algorithm", choices=list(ALGORITHMS),
+                    help=f"省略時依文件數建議（≤ {KMEDOIDS_MAX} 篇為 kmedoids，否則為 spherical）")
     ap.add_argument("--k-min", type=int)
     ap.add_argument("--k-max", type=int)
     ap.add_argument("--out", default=str(DEFAULT_OUT))
@@ -164,14 +161,16 @@ def main(argv=None):
     k_max = args.k_max if args.k_max is not None else (default[1] if default else k_min)
     if not 2 <= k_min <= k_max < n:
         sys.exit(f"候選群數範圍不合理：k = {k_min} .. {k_max}（需 2 ≤ k_min ≤ k_max < 文件數 {n}）。")
-    if n > KMEDOIDS_SUGGEST_MAX:
-        print(f"注意：文件數 {n} 超過 {KMEDOIDS_SUGGEST_MAX}，k-medoids 需要大量記憶體與時間。")
+    algorithm = args.algorithm or suggest_algorithm(n)
+    if algorithm in LARGE_N_WARNING and n > KMEDOIDS_MAX:
+        print(f"注意：文件數 {n} 超過 {KMEDOIDS_MAX}，{ALGORITHMS[algorithm]} 需要大量記憶體與時間。")
 
-    D = cosine_distance_matrix(vectors)
+    D = cosine_distance_matrix(vectors) if needs_distance_matrix(algorithm, n) else None
+    L = build_linkage(vectors) if algorithm == "hierarchical" else None
     results = []
     for k in range(k_min, k_max + 1):
         print(f"分群中：k = {k}", file=sys.stderr, flush=True)
-        results.append(run_k(D, counts, vocab, k))
+        results.append(run_k(vectors, D, counts, vocab, k, algorithm, L=L))
 
     metrics = pd.DataFrame([{
         "k": r["k"], "silhouette": r["silhouette"], "npmi": r["npmi"], "cost": r["cost"],
@@ -182,13 +181,14 @@ def main(argv=None):
     metrics.to_csv(wd / "metrics_by_k.csv", index=False, encoding="utf-8")
     np.savez(wd / "labels.npz", **{f"k{r['k']}": r["labels"] for r in results})
     save_json({str(r["k"]): {
-        "medoids": r["medoids"].tolist(),
+        "medoids": None if r["medoids"] is None else r["medoids"].tolist(),
         "sizes": r["sizes"].tolist(),
         "keywords": r["keywords"],
         "npmi_per_cluster": [None if np.isnan(v) else round(float(v), 4) for v in r["npmi_per_cluster"]],
     } for r in results}, wd / "clusters_by_k.json")
     save_json({
-        "algorithm": "k-medoids（k-medoids++ 初始化＋FasterPAM）",
+        "algorithm": algorithm,
+        "algorithm_name": ALGORITHMS[algorithm],
         "distance": "cosine",
         "n_init": N_INIT,
         "seed": SEED,
@@ -198,8 +198,24 @@ def main(argv=None):
     }, wd / "config.json")
     png = wd / "k_selection.png"
     zh_font = plot_k_selection(metrics, png)
+    dendro = None
+    if L is not None:
+        np.save(wd / "linkage.npy", L)
+        top = results[-1]
+        Z = cluster_linkage(L, top["labels"], top["k"])
+        dendro = wd / "dendrogram.png"
+        font = cjk_font()
+        leaf = [f"{', '.join(kw[:2])}（{s}）" if font else f"{c} ({s})"
+                for c, (kw, s) in enumerate(zip(top["keywords"], top["sizes"]))]
+        plot_dendrogram(Z, leaf, dendro,
+                        f"切成 {top['k']} 群時各群的合併關係（前 2 個關鍵詞（文件數））" if font
+                        else f"Merge tree of the {top['k']} clusters", font)
+    elif (wd / "linkage.npy").exists():
+        (wd / "linkage.npy").unlink()
 
-    print_checkpoint(n, (k_min, k_max), metrics, results, png, zh_font)
+    print_checkpoint(n, (k_min, k_max), metrics, results, png, zh_font, algorithm, D is None)
+    if dendro is not None:
+        print(f"樹狀圖（切成 k = {k_max} 群時，各群的上下層關係；較小的 k 即由這棵樹往上合併而成）：{dendro}")
     print()
     print(f"中間結果已存於 {wd}")
 

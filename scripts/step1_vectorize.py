@@ -1,7 +1,8 @@
 """步驟 1　前處理與向量化。
 
 固定設定：語言自動判斷；英文先移除 email、網址與主機名稱，依空白、標點與數字切分，
-去除內建英文停用詞（含縮寫殘片）；
+去除內建英文停用詞（含縮寫殘片）；中文以內附 jieba 精確模式＋大詞典斷詞（見 tokenize_zh.py），
+去除單字詞、數字與內建中文停用詞；
 TF-IDF → Truncated SVD（100 維，文件數 ≤ 100 時為 n − 1）→ 長度正規化。
 可選設定：詞彙篩選（min_df、max_df 或不篩選；min_df 預設依文件數：< 1,000 篇為 2，否則為 5）、詞組範圍（單詞或單詞＋雙詞）。
 
@@ -30,6 +31,7 @@ from sklearn.preprocessing import normalize
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import DATA_20NG, DEFAULT_OUT, SEED, load_docs, load_json, save_json, setup_stdout, work_dir  # noqa: E402
+from tokenize_zh import ZhAnalyzer  # noqa: E402
 
 SVD_DIM = 100
 ZH_THRESHOLD = 0.3
@@ -60,7 +62,7 @@ def clean_en(text):
     """英文前處理：移除 email、網址與主機名稱，轉小寫。"""
     return _EN_NOISE.sub(" ", text).lower()
 
-_CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
+_CJK = re.compile("[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 _LATIN = re.compile(r"[A-Za-z]")
 
 
@@ -74,9 +76,28 @@ def detect_language(texts):
     return ("zh" if ratio > ZH_THRESHOLD else "en"), ratio
 
 
+def fixed_settings(lang):
+    """記錄於 config.json 與報告的固定前處理設定。"""
+    if lang == "zh":
+        return {
+            "preprocess": "移除 email、網址、主機名稱；英文轉小寫",
+            "tokenizer": "jieba 0.42.1 精確模式（內附 dict.txt.big）；只保留兩字以上中文詞與兩個字母以上英文詞",
+            "stop_words": "內建中文停用詞（本專案整理）＋英文停用詞",
+        }
+    return {
+        "preprocess": "移除 email、網址、主機名稱；轉小寫",
+        "tokenizer": f"依空白、標點與數字切分（{EN_TOKEN_PATTERN}）",
+        "stop_words": "scikit-learn ENGLISH_STOP_WORDS＋英文縮寫殘片",
+    }
+
+
 def make_vectorizer(lang, min_df, max_df, ngram_max):
-    if lang != "en":
-        raise NotImplementedError("目前版本只支援英文，中文將於下一階段加入。")
+    if lang == "zh":
+        return CountVectorizer(
+            analyzer=ZhAnalyzer(ngram_max, clean_en, EN_STOP_WORDS),
+            min_df=min_df,
+            max_df=max_df,
+        )
     return CountVectorizer(
         preprocessor=clean_en,
         token_pattern=EN_TOKEN_PATTERN,
@@ -140,16 +161,20 @@ def _top_terms_table(counts, vocab, idx, top_n):
     ]
 
 
-def summarize(docs, counts, vocab, top_n=20, top_bigrams=15):
-    raw_len = docs["text"].str.split().str.len()
+def summarize(docs, counts, vocab, top_n=20, top_bigrams=15, lang="en"):
+    if lang == "zh":   # 中文沒有空白分詞，原始長度以字數（不含空白）計
+        raw_len = docs["text"].str.replace(r"\s+", "", regex=True).str.len()
+    else:
+        raw_len = docs["text"].str.split().str.len()
     eff_len = np.asarray(counts.sum(axis=1)).ravel()
     bigram_idx = [i for i, t in enumerate(vocab) if " " in t]
     out = {
         "文件數": int(counts.shape[0]),
         "詞彙量": len(vocab),
         "雙詞數": len(bigram_idx),
-        "平均原始詞數": round(float(raw_len.mean()), 1),
-        "原始詞數中位數": float(raw_len.median()),
+        "原始長度單位": "字" if lang == "zh" else "詞",
+        "平均原始長度": round(float(raw_len.mean()), 1),
+        "原始長度中位數": float(raw_len.median()),
         "平均有效詞數": round(float(eff_len.mean()), 1),
         "有效詞數中位數": float(np.median(eff_len)),
         "有效詞數少於 5 的文件": int((eff_len < 5).sum()),
@@ -203,7 +228,8 @@ def print_checkpoint(load_stats, lang, ratio, settings, info, summary, n_dropped
     print(f"文件數：{summary['文件數']}")
     bi = f"（其中雙詞 {summary['雙詞數']}）" if summary["雙詞數"] else ""
     print(f"詞彙量：{summary['詞彙量']}{bi}")
-    print(f"平均文件長度：原始 {summary['平均原始詞數']} 詞（中位數 {summary['原始詞數中位數']:g}）；"
+    unit = summary["原始長度單位"]
+    print(f"平均文件長度：原始 {summary['平均原始長度']} {unit}（中位數 {summary['原始長度中位數']:g}）；"
           f"去除停用詞與篩選後 {summary['平均有效詞數']} 詞（中位數 {summary['有效詞數中位數']:g}）")
     print(f"SVD 降至 {info['svd_dim']} 維。")
     print()
@@ -279,7 +305,7 @@ def main(argv=None):
 
     dropped = docs.drop(index=info["keep"])
     docs = docs.iloc[info["keep"]].reset_index(drop=True)
-    summary = summarize(docs, info["counts"], info["vocab"])
+    summary = summarize(docs, info["counts"], info["vocab"], lang=lang)
 
     wd = work_dir(args.out, "step1")
     previous = _load_previous(wd, path)
@@ -299,9 +325,7 @@ def main(argv=None):
         "language": lang,
         "zh_ratio": round(ratio, 4),
         **settings,
-        "preprocess": "移除 email、網址、主機名稱；轉小寫",
-        "stop_words": "scikit-learn ENGLISH_STOP_WORDS＋英文縮寫殘片",
-        "token_pattern": EN_TOKEN_PATTERN,
+        **fixed_settings(lang),
         "tfidf": "scikit-learn TfidfTransformer 預設（smooth_idf、l2）",
         "svd_dim": info["svd_dim"],
         "svd_explained_variance": round(info["svd_explained_variance"], 4),

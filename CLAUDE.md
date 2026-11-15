@@ -19,7 +19,7 @@
 固定設定：
 
 - 語言：依中文字元比例自動判斷。
-- 中文：jieba 精確模式斷詞＋內建中文停用詞。英文：先移除 email、網址、主機名稱（只認 edu/com/org/net/gov/mil 結尾，避免誤刪檔名），依空白、標點與數字切分（只留 ≥ 2 個字母的詞），內建英文停用詞（scikit-learn 清單＋縮寫殘片 don、ve 等）。
+- 中文：內附 jieba 0.42.1 精確模式＋大詞典 `dict.txt.big`（繁簡體一律使用），只留兩字以上中文詞與 ≥ 2 字母英文詞（捨棄單字詞、數字、標點）；內建中文停用詞 `scripts/stopwords_zh.txt`（自行整理，繁簡並列）＋英文停用詞。實作在 `scripts/tokenize_zh.py`，vendor 來源與刪減記錄於 `vendor/README.md`。英文：先移除 email、網址、主機名稱（只認 edu/com/org/net/gov/mil 結尾，避免誤刪檔名），依空白、標點與數字切分（只留 ≥ 2 個字母的詞），內建英文停用詞（scikit-learn 清單＋縮寫殘片 don、ve 等）。
 - TF-IDF 加權 → Truncated SVD 降至 100 維（文件數 ≤ 100 時改為 n − 1）→ 向量長度正規化為 1。
 - 20 Newsgroups 一律移除 headers、footers、quotes。
 
@@ -61,9 +61,10 @@
 
 - **c-TF-IDF**（Grootendorst 2022）：每群文件合併為一份；`W[t,c] = tf[t,c] * log(1 + A / f[t])`。`tf[t,c]` 為詞 t 在群 c 的次數（依群總詞數正規化），`A` 為每群平均詞數，`f[t]` 為詞 t 在所有群的總次數。用原始詞頻計數（CountVectorizer），詞彙與 TF-IDF 相同。
 - **NPMI**（Bouma 2009；Newman et al. 2010）：以「文件內是否共同出現」估計機率，資料為本次語料。每群前 10 個關鍵詞兩兩計算 `NPMI = log(p(i,j) / (p(i) p(j))) / (−log p(i,j))`；`p(i,j) = 0` 時記為 −1。先對群內所有詞對取平均，再對所有群取平均。
-- **silhouette**：`sklearn.metrics.silhouette_score(D, labels, metric="precomputed")`，D 為 cosine 距離矩陣。文字資料數值通常偏低，報告須說明只宜比較相對高低。
+- **silhouette**：`sklearn.metrics.silhouette_score(D, labels, metric="precomputed")`，D 為 cosine 距離矩陣。文件數 > 5,000 時不建距離矩陣，改用 `silhouette_score(X, labels, metric="cosine", sample_size=5000, random_state=seed)` 抽樣計算，並在檢查點與報告註明。文字資料數值通常偏低，報告須說明只宜比較相對高低。
 - **k-medoids**：自行實作於 `scripts/kmedoids.py`，不依賴 `kmedoids` 或 `scikit-learn-extra`（沙盒沒有）。已實作 k-medoids++ 初始化＋FasterPAM 交換（Schubert & Rousseeuw 2021），5 次初始化取總成本最低者；群編號依 medoid 文件索引排序。
-- **球面 k-means**：在正規化向量上用 `sklearn.cluster.KMeans`，近似球面 k-means（Dhillon & Modha 2001）。
+- **球面 k-means**：自行實作於 `scripts/spherical_kmeans.py`（Dhillon & Modha 2001）：依 cosine 相似度分配、中心為群內向量和再正規化為 1；k-means++ 初始化，5 次初始化取總 cosine 距離最小者；群編號依群內最小文件索引排序。不用 sklearn KMeans（它不會重新正規化中心，只是近似）。演算法統一介面在 `scripts/clustering.py`。
+- **階層式分群**：`scripts/hierarchical.py`，scipy `linkage(X, "ward")` 作用於單位向量（歐氏距離² = 2 − 2cos），連結法固定為 Ward（開發時比較：average 在 20NG 小群數時幾乎全併成一群、complete 分不開，Ward 群大小較均衡且 silhouette 最高）。樹建一次，以 `cut_tree` 依 k 切割；步驟 2 存 `linkage.npy` 並畫上限 k 的樹狀圖，步驟 3 印出 k 群的合併順序並畫樹狀圖，報告列出合併順序。
 - **事後比對**：`adjusted_rand_score`、`normalized_mutual_info_score`；純度自行計算（每群取多數標籤，加總後除以 n）。
 
 ## 執行環境限制（重要）

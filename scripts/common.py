@@ -13,6 +13,16 @@ DEFAULT_OUT = Path("output")
 
 ENCODINGS = ("utf-8-sig", "utf-8", "cp950", "big5", "gb18030", "latin-1")
 
+CJK_FONTS = ["Noto Sans CJK TC", "Microsoft JhengHei", "PingFang TC", "Heiti TC", "Noto Sans TC",
+             "Noto Sans CJK JP", "Noto Sans CJK SC", "WenQuanYi Zen Hei", "SimHei"]
+
+
+def cjk_font():
+    """回傳可用的中文字型名稱；沒有時回傳 None（圖中文字改用英文）。"""
+    from matplotlib import font_manager
+    names = {f.name for f in font_manager.fontManager.ttflist}
+    return next((f for f in CJK_FONTS if f in names), None)
+
 
 def setup_stdout():
     """Windows 主控台預設不是 UTF-8，統一改成 UTF-8 以正確輸出中文。"""
