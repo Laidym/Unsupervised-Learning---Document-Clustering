@@ -20,7 +20,8 @@ import pandas as pd
 from scipy import sparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import DEFAULT_OUT, load_json, save_json, setup_stdout, work_dir  # noqa: E402
+from common import DEFAULT_OUT, cjk_font, load_json, save_json, setup_stdout, work_dir  # noqa: E402
+from hierarchical import cluster_linkage, merge_steps, plot_dendrogram  # noqa: E402
 from textmetrics import TOP_N, top_terms  # noqa: E402
 
 
@@ -67,6 +68,22 @@ def print_keywords(k, rows, n):
         print(f"群 {r['cluster']}（{r['size']} 篇，{r['size'] / n:.1%}）：{', '.join(r['keywords'])}")
 
 
+def show_hierarchy(s2, wd, labels, k, leaf_names, title):
+    """階層式分群：印出 k 群之間的合併順序，並畫樹狀圖。其他演算法不做任何事。"""
+    lp = s2 / "linkage.npy"
+    if not lp.exists() or k < 2:
+        return
+    Z = cluster_linkage(np.load(lp), labels, k)
+    font = cjk_font()
+    path = wd / "dendrogram.png"
+    plot_dendrogram(Z, leaf_names if font else [f"{c}" for c in range(k)], path, title if font else "Merge tree", font)
+    print()
+    print("各群合併關係（由近到遠；越早合併的群內容越接近）：")
+    for line in merge_steps(Z, leaf_names):
+        print(f"  {line}")
+    print(f"樹狀圖：{path}")
+
+
 def main(argv=None):
     setup_stdout()
     ap = argparse.ArgumentParser(description="步驟 3　群關鍵詞與命名")
@@ -101,11 +118,15 @@ def main(argv=None):
     rows = cluster_keywords(counts, labels, args.k, vocab)
     wd = work_dir(out, "step3")
     save_json({"k": args.k, "clusters": rows,
-               "medoid_doc_ids": [docs["doc_id"][m] for m in medoids]}, wd / "keywords.json")
+               "medoid_doc_ids": None if medoids is None else [docs["doc_id"][m] for m in medoids]},
+              wd / "keywords.json")
     pd.DataFrame({"doc_id": docs["doc_id"], "cluster": labels}).to_csv(
         wd / "assignments.csv", index=False, encoding="utf-8")
 
     print_keywords(args.k, rows, len(docs))
+    show_hierarchy(s2, wd, labels, args.k,
+                   [f"群 {r['cluster']}：{', '.join(r['keywords'][:3])}" for r in rows],
+                   f"{args.k} 群的合併關係（標示前 3 個關鍵詞）")
 
     if args.names is None and args.names_file is None:
         names_path = wd / "names.json"
@@ -139,6 +160,8 @@ def main(argv=None):
     print("群名稱：")
     for c, (s, src) in enumerate(zip(names, sources)):
         print(f"  群 {c}：{s}（{src}）")
+    show_hierarchy(s2, wd, labels, args.k, [f"群 {c} {s}" for c, s in enumerate(names)],
+                   f"{args.k} 群的合併關係")
     if dup:
         print(f"注意：有重複的群名稱（{'、'.join(dup)}），可考慮合併或改名。")
     print()

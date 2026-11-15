@@ -15,11 +15,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score, silhouette_score
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import DEFAULT_OUT, load_json, setup_stdout  # noqa: E402
-from kmedoids import cosine_distance_matrix  # noqa: E402
+from clustering import ALGORITHMS, silhouette  # noqa: E402
+from hierarchical import cluster_linkage, merge_steps  # noqa: E402
 from textmetrics import cluster_npmi  # noqa: E402
 
 FIXED_LIMITS = [
@@ -105,19 +106,24 @@ def build_report(ctx):
           f"重複文件 {s1['load_stats']['刪除重複文件']}、無有效詞文件 {len(s1['dropped_no_terms'])}；"
           f"分析 {ctx['n']} 篇",
           f"- 語言：{'英文' if s1['language'] == 'en' else '中文'}",
-          f"- 前處理：{s1['preprocess']}；停用詞：{s1['stop_words']}",
+          f"- 前處理：{s1['preprocess']}；斷詞：{s1.get('tokenizer', '—')}；停用詞：{s1['stop_words']}",
           f"- 詞彙篩選：{filt}；詞組範圍：{ngram}；詞彙量 {ctx['n_vocab']}",
           f"- 向量化：TF-IDF → Truncated SVD {s1['svd_dim']} 維 → 長度正規化",
-          f"- 分群：{s2['algorithm']}，cosine 距離，{s2['n_init']} 次初始化",
+          f"- 分群：{ALGORITHMS.get(s2['algorithm'], s2['algorithm'])}，cosine 距離，{s2['n_init']} 次初始化",
           f"- 候選群數 k = {s2['k_min']} .. {s2['k_max']}；選定 k = {ctx['k']}",
           "- 關鍵詞：c-TF-IDF 前 10 名",
           f"- 隨機種子：{s1['seed']}（步驟 1 SVD、步驟 2 k-medoids）", ""]
 
     L += ["## 各群", ""]
     L += [_md_table(ctx["cluster_table"]), ""]
+    if ctx.get("merge"):
+        L += ["## 各群的上下層關係（階層式分群）", "",
+              "由近到遠的合併順序；越早合併的群內容越接近：", ""]
+        L += [f"{i}. {line}" for i, line in enumerate(ctx["merge"], 1)] + [""]
 
     L += ["## 內部指標", ""]
-    L += [f"- silhouette 係數：{ctx['silhouette']:.3f}（範圍 −1 至 1；文字資料通常偏低，宜比較不同群數的相對高低）",
+    samp = "；文件數超過 5,000 篇，以隨機抽樣 5,000 篇計算" if ctx["sil_sampled"] else ""
+    L += [f"- silhouette 係數：{ctx['silhouette']:.3f}（範圍 −1 至 1；文字資料通常偏低，宜比較不同群數的相對高低{samp}）",
           f"- 關鍵詞一致性 NPMI：{ctx['npmi']:.3f}（範圍 −1 至 1；越高表示各群關鍵詞越常在同一文件共同出現）", ""]
 
     L += ["## 事後比對", ""]
@@ -164,8 +170,11 @@ def main(argv=None):
     clusters = np.load(w2 / "labels.npz")[f"k{k}"]
     n = len(docs)
 
-    D = cosine_distance_matrix(vectors)
-    sil = float(silhouette_score(D, clusters, metric="precomputed"))
+    sil, sil_sampled = silhouette(vectors, clusters, seed=cfg1["seed"])
+    merge = None
+    if cfg2.get("algorithm") == "hierarchical" and (w2 / "linkage.npy").exists() and k >= 2:
+        Z = cluster_linkage(np.load(w2 / "linkage.npy"), clusters, k)
+        merge = merge_steps(Z, [f"群 {c} {names[c]}" for c in range(k)])
     vidx = {t: i for i, t in enumerate(vocab)}
     kw_idx = [[vidx[t] for t in c["keywords"]] for c in kw["clusters"]]
     npmi, npmi_per = cluster_npmi(counts, kw_idx)
@@ -208,7 +217,7 @@ def main(argv=None):
     metrics.to_csv(out / "metrics.csv", index=False, encoding="utf-8-sig")
 
     ctx = {"cfg1": cfg1, "cfg2": cfg2, "n": n, "n_vocab": len(vocab), "k": k,
-           "silhouette": sil, "npmi": npmi, "external": external, "n_classes": n_classes,
+           "merge": merge, "silhouette": sil, "sil_sampled": sil_sampled, "npmi": npmi, "external": external, "n_classes": n_classes,
            "crosstab": crosstab, "cluster_table": cluster_table, "data_notes": notes}
     report = build_report(ctx)
     (out / "report.md").write_text(report, encoding="utf-8")
