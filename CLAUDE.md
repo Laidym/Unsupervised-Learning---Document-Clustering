@@ -86,7 +86,7 @@ README.qmd          使用說明原始檔；references.bib、references.csl 為�
 CLAUDE.md           本檔
 scripts/            分析程式（各步驟可獨立執行，中間結果存檔以支援回到前一步重做）
 vendor/jieba/       內附中文斷詞
-data/               20 Newsgroups 範例子集
+data/               20 Newsgroups 範例子集（打包進 skill）；bbc-fulltext.zip、NPA_165.csv 為開發測試資料（不打包，見 data/README.md）
 tests/              測試
 ```
 

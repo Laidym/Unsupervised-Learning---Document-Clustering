@@ -40,6 +40,7 @@ def test_read_folder_and_zip(tmp_path):
         for f in folder.rglob("*.txt"):
             z.write(f, Path("wrapper") / f.relative_to(folder))   # 外層多包一層資料夾
         z.writestr("__MACOSX/._x.txt", b"\x00\x01")
+        z.writestr("wrapper/README.TXT", b"Consists of 240 documents.")   # 資料集說明檔不是文件
     dz = read_table(zpath)
     assert dz.sort_values("doc_id").reset_index(drop=True).equals(
         df.sort_values("doc_id").reset_index(drop=True))

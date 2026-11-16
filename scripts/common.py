@@ -61,8 +61,9 @@ def _read_text_file(path):
 
 
 def _skip(rel):
-    """略過 macOS 壓縮時附帶的 __MACOSX/、._ 檔與隱藏檔。"""
-    return any(part == "__MACOSX" or part.startswith(".") for part in rel.parts)
+    """略過 macOS 壓縮時附帶的 __MACOSX/、._ 檔、隱藏檔，以及資料集說明檔 README.txt（不分大小寫）。"""
+    return (any(part == "__MACOSX" or part.startswith(".") for part in rel.parts)
+            or rel.stem.lower() == "readme")
 
 
 def txt_files_table(items):
