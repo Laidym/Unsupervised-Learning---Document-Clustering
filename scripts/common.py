@@ -126,11 +126,13 @@ def read_table(path):
 def load_docs(path, text_col, label_col=None, id_col=None, categories=None):
     """讀入文件並做基本清理。
 
+    text_col 可為多個欄位（例如標題與內文），依序以換行合併為一篇文件。
     回傳 (docs, stats)。docs 欄位為 doc_id、text，以及（若有指定）label。
     stats 記錄原始列數、刪除的空白列與重複文件數。
     """
     df = read_table(path)
-    for col in (text_col, label_col, id_col):
+    text_cols = [text_col] if isinstance(text_col, str) else list(text_col)
+    for col in (*text_cols, label_col, id_col):
         if col is not None and col not in df.columns:
             raise ValueError(f"找不到欄位「{col}」。可用欄位：{', '.join(map(str, df.columns))}")
 
@@ -139,7 +141,11 @@ def load_docs(path, text_col, label_col=None, id_col=None, categories=None):
             raise ValueError("指定類別時必須同時指定標籤欄位。")
         df = df[df[label_col].isin(categories)]
 
-    docs = pd.DataFrame({"text": df[text_col].astype("string").fillna("").str.strip()})
+    parts = [df[c].astype("string").fillna("").str.strip() for c in text_cols]
+    text = parts[0]
+    for p in parts[1:]:
+        text = (text + "\n" + p).str.strip()      # 某欄為空時不留多餘換行
+    docs = pd.DataFrame({"text": text})
     if id_col is not None:
         docs.insert(0, "doc_id", df[id_col].astype(str).values)
     elif "doc_id" in df.columns:
