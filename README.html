@@ -5572,7 +5572,7 @@ window.Quarto = {
 <section id="步驟-1-前處理與向量化" class="level2">
 <h2 class="anchored" data-anchor-id="步驟-1-前處理與向量化">步驟 1　前處理與向量化</h2>
 <p>將每篇文件轉為一個數值向量，作為分群的依據。</p>
-<p><strong>讀取資料時</strong>，使用者指定要分析的文字欄位，以及標籤欄位（若有）。標籤欄位只用於步驟 4 的事後比對。</p>
+<p><strong>讀取資料時</strong>，使用者指定要分析的文字欄位，以及標籤欄位（若有）。標籤欄位只用於步驟 4 的事後比對。資料同時有標題與內文欄位時，可選擇把兩欄依序合併為一篇文件：內文很短時，多了標題的詞可供分群；但標題若有固定格式（如「【闢謠】」），也會被當成詞彙。skill 會依內文長度提出建議，由使用者決定。</p>
 <p><strong>固定設定</strong>：</p>
 <table class="caption-top table">
 <colgroup>
@@ -6026,7 +6026,7 @@ H(V) = -\sum_j \frac{b_j}{n} \ln \frac{b_j}{n},
 <tbody>
 <tr class="odd">
 <td>CSV 或 Excel</td>
-<td>每一列為一篇文件</td>
+<td>每一列為一篇文件；可指定多個文字欄位（如標題與內文）合併</td>
 </tr>
 <tr class="even">
 <td>純文字檔</td>

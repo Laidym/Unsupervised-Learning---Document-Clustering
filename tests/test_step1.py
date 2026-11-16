@@ -98,6 +98,26 @@ def test_load_docs_single_column_csv(tmp_path):
     assert list(docs["text"]) == ["hello world", "foo bar"]
 
 
+def test_load_docs_combines_text_columns(tmp_path):
+    f = tmp_path / "in.csv"
+    pd.DataFrame({"標題": ["詐騙簡訊", "", "", "假客服"],
+                  "內文": ["勿點連結", "只有內文", "", ""]}).to_csv(f, index=False)
+    docs, stats = load_docs(f, ["標題", "內文"])
+    assert list(docs["text"]) == ["詐騙簡訊\n勿點連結", "只有內文", "假客服"]
+    assert stats["刪除空白列"] == 1
+    with pytest.raises(ValueError, match="找不到欄位「摘要」"):
+        load_docs(f, ["標題", "摘要"])
+
+
+def test_main_records_combined_text_columns(tmp_path):
+    f = tmp_path / "in.csv"
+    src = pd.read_csv(Path(__file__).resolve().parent / "data" / "zh_sample.csv")
+    src.assign(標題=src["內容"].str[:6]).to_csv(f, index=False)
+    main(["--input", str(f), "--text-col", "標題", "內容", "--out", str(tmp_path / "o")])
+    cfg = pd.read_json(tmp_path / "o" / "work" / "step1" / "config.json", typ="series")
+    assert cfg["text_col"] == "標題＋內容"
+
+
 def test_load_docs_missing_column(tmp_path):
     f = tmp_path / "in.csv"
     pd.DataFrame({"t": ["a"]}).to_csv(f, index=False)

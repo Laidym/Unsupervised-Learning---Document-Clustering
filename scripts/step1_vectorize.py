@@ -11,6 +11,7 @@ TF-IDF → Truncated SVD（100 維，文件數 ≤ 100 時為 n − 1）→ 長�
 用法：
   python scripts/step1_vectorize.py --dataset 20ng
   python scripts/step1_vectorize.py --input reviews.csv --text-col 內容 [--label-col 類別]
+  python scripts/step1_vectorize.py --input news.csv --text-col 標題 內文   （多個欄位依序合併）
   可加 --min-df 5、--no-filter、--ngram 2
 """
 import argparse
@@ -313,7 +314,8 @@ def main(argv=None):
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--dataset", choices=["20ng"], help="使用內建範例資料")
     src.add_argument("--input", help="CSV、Excel 檔，或 .txt 資料夾／zip（每個檔案一篇文件）")
-    ap.add_argument("--text-col", help="文字欄位（.txt 資料夾／zip 免填，固定為 text）")
+    ap.add_argument("--text-col", nargs="+",
+                    help="文字欄位；可給多個（如標題 內文），依序以換行合併（.txt 資料夾／zip 免填，固定為 text）")
     ap.add_argument("--label-col", help="標籤欄位（只用於步驟 4 事後比對）")
     ap.add_argument("--id-col", help="文件編號欄位（可省略）")
     ap.add_argument("--categories", nargs="+", help="只取這些類別（20ng 用）")
@@ -332,7 +334,7 @@ def main(argv=None):
         if not args.text_col and not files:
             ap.error("使用 --input 時必須指定 --text-col")
         path, label_col, id_col = args.input, args.label_col, args.id_col
-        text_col = args.text_col or "text"
+        text_col = args.text_col or ["text"]
 
     docs, load_stats = load_docs(path, text_col, label_col, id_col, args.categories)
     if args.no_filter:
@@ -365,7 +367,7 @@ def main(argv=None):
     config = {
         "input": str(path),
         "input_kind": "files" if files else "table",
-        "text_col": text_col,
+        "text_col": "＋".join([text_col] if isinstance(text_col, str) else text_col),
         "label_col": label_col,
         "language": lang,
         "zh_ratio": round(ratio, 4),
