@@ -113,5 +113,6 @@ tests/              測試
 
 - 修改流程或預設值時，`README.qmd` 與 `SKILL.md` 必須同步更新。
 - `README.qmd` 的參考文獻用 `[@key]` 引用 `references.bib`；新增或刪除方法時同步增刪文獻，不保留未引用的條目。
+- 表格第一欄有連續相同內容時要合併儲存格：`README.qmd` 用 grid table 的跨列儲存格（Pandoc 3 以上支援）；`SKILL.md` 及與使用者互動時的表格無法合併，重複的內容留空，只寫在該組第一列。
 - 產生 HTML：`quarto render README.qmd`。
 - 安裝用的 `text-clustering.zip` 放在 repo 根目錄並納入版本控制，由 `python tools/build_skill.py` 產生（只含 SKILL.md、scripts/、vendor/、data/，換行一律 LF）。修改這些內容後，commit 前必須重新打包，讓 zip 與原始碼一致。
