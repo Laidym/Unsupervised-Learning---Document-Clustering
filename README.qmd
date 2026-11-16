@@ -19,6 +19,7 @@ format:
       theme: neutral
   gfm:
     wrap: none          # 中文不在句中斷行
+    variant: +tex_math_gfm   # 行內數學式輸出為 $`…`$，避免 GitHub 在中文標點旁辨識失敗
     # 不產生目錄：GitHub 會自動提供標題目錄，且中文標題的錨點規則與 Pandoc 不同
 ---
 
