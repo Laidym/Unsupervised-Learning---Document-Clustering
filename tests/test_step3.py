@@ -49,11 +49,13 @@ def test_names_write_outputs(out):
     clusters = pd.read_csv(out / "clusters.csv", encoding="utf-8-sig", dtype={"doc_id": str})
     assert list(clusters.columns) == ["doc_id", "text", "cluster", "群名稱"]
     assert (clusters["群名稱"] == clusters["cluster"].map(dict(enumerate(names)))).all()
-    summary = pd.read_csv(out / "cluster_summary.csv", encoding="utf-8-sig")
-    assert list(summary.columns) == ["cluster", "群名稱", "文件數", "關鍵詞"]
-    assert summary["文件數"].sum() == len(clusters)
+    assert not (out / "cluster_summary.csv").exists() and not (out / "clusters_files.zip").exists()
+    # 依群排序、群內維持原始順序
+    assert clusters["cluster"].is_monotonic_increasing
+    docs = pd.read_csv(out / "work" / "step1" / "docs.csv", dtype={"doc_id": str})
     labels = np.load(out / "work" / "step2" / "labels.npz")["k4"]
-    assert np.array_equal(clusters["cluster"].to_numpy(), labels)
+    expected = docs.assign(cluster=labels).sort_values("cluster", kind="stable")
+    assert clusters["doc_id"].tolist() == expected["doc_id"].tolist()
 
 
 def test_names_file(out, tmp_path):

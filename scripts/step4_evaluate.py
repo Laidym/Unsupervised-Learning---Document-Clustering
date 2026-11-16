@@ -4,7 +4,8 @@
 事後比對（自動）：步驟 1 有指定標籤欄才計算 ARI、NMI、純度；否則略過。標籤只在本步驟讀取。
 限制：固定說明四項，並依本次資料提示。
 
-輸出：<out>/metrics.csv、<out>/report.md（文字報告，記錄所有設定與 seed）。
+輸出：<out>/report.html（單一檔案，圖片內嵌，記錄所有設定與 seed）；
+文字版報告印在標準輸出。
 
 用法：python scripts/step4_evaluate.py [--out output]
 """
@@ -18,9 +19,11 @@ from scipy import sparse
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import DEFAULT_OUT, load_json, setup_stdout  # noqa: E402
+from common import DEFAULT_OUT, load_json, setup_stdout, work_dir  # noqa: E402
 from clustering import ALGORITHMS, silhouette  # noqa: E402
 from hierarchical import cluster_linkage, merge_steps  # noqa: E402
+from report_html import render as render_html  # noqa: E402
+from step2_cluster import plot_k_selection, plot_overview_dendrogram  # noqa: E402
 from textmetrics import cluster_npmi  # noqa: E402
 
 FIXED_LIMITS = [
@@ -35,6 +38,11 @@ SMALL_CLUSTER_MIN = 10         # 文件數少於此值的群
 SMALL_CLUSTER_RATIO = 0.3      # 或少於平均群大小的此比例
 UNEVEN_RATIO = 5               # 最大群／最小群超過此倍數
 NPMI_GAP = 0.1                 # 群的 NPMI 低於各群平均超過此值
+DOMINANT_SHARE = 0.3           # 群內單一文件占該群關鍵詞出現次數的比例超過此值
+SHARED_KEYWORDS = 5            # 兩群前 10 個關鍵詞相同達此數
+MIXED_ZH_IN_EN = 0.05          # 判為英文、但中文字元比例超過此值
+MIXED_EN_IN_ZH = 0.7           # 判為中文、但中文字元比例低於此值
+REMOVED_SHARE = 0.1            # 空白列與重複文件占原始列數超過此比例
 
 
 def purity(clusters, labels):
@@ -51,9 +59,46 @@ def external_metrics(clusters, labels):
     }
 
 
-def data_limits(*, n, k, sizes, npmi_per, silhouette, eff_median, n_dropped, k_range):
+def keyword_dominance(counts, clusters, kw_idx):
+    """各群關鍵詞出現次數中，來自單一文件的最大比例。回傳 [(比例, 該群文件數)]。"""
+    out = []
+    for c, idx in enumerate(kw_idx):
+        rows = np.flatnonzero(clusters == c)
+        if not idx or len(rows) == 0:
+            out.append((0.0, len(rows)))
+            continue
+        per_doc = np.asarray(counts[rows][:, idx].sum(axis=1)).ravel()
+        total = per_doc.sum()
+        out.append((float(per_doc.max() / total) if total else 0.0, len(rows)))
+    return out
+
+
+def shared_keyword_pairs(keywords):
+    """前 10 個關鍵詞相同達 SHARED_KEYWORDS 個的群對。"""
+    pairs = []
+    for i in range(len(keywords)):
+        for j in range(i + 1, len(keywords)):
+            common = [w for w in keywords[i] if w in set(keywords[j])]
+            if len(common) >= SHARED_KEYWORDS:
+                pairs.append((i, j, common))
+    return pairs
+
+
+def data_limits(*, n, k, sizes, npmi_per, silhouette, eff_median, n_dropped, k_range,
+                dominance=None, keywords=None, language=None, zh_ratio=None, load_stats=None):
     """依本次資料產生的限制提示。"""
     notes = []
+    if load_stats and load_stats["原始列數"]:
+        removed = load_stats["刪除空白列"] + load_stats["刪除重複文件"]
+        if removed / load_stats["原始列數"] > REMOVED_SHARE:
+            notes.append(f"讀入的 {load_stats['原始列數']} 列中有 {removed} 列為空白或重複而被刪除"
+                         f"（{removed / load_stats['原始列數']:.0%}），請確認資料是否符合預期。")
+    if language == "en" and zh_ratio is not None and zh_ratio > MIXED_ZH_IN_EN:
+        notes.append(f"資料判為英文，但含有 {zh_ratio:.0%} 的中文字元；英文流程不會斷開中文，"
+                     "中文內容的分析品質較差。")
+    if language == "zh" and zh_ratio is not None and zh_ratio < MIXED_EN_IN_ZH:
+        notes.append(f"資料判為中文，但英文字母約占 {1 - zh_ratio:.0%}；英文詞會保留為獨立的詞，"
+                     "中英混雜的文件可能因語言不同而被分開。")
     if eff_median < SHORT_DOC_MEDIAN:
         notes.append(f"文件偏短：去除停用詞後的有效詞數中位數只有 {eff_median:g} 個，"
                      "詞袋向量稀疏，分群與關鍵詞較不穩定。")
@@ -78,6 +123,16 @@ def data_limits(*, n, k, sizes, npmi_per, silhouette, eff_median, n_dropped, k_r
                      "這在高維文字資料很常見，但表示不少文件位於兩群交界。")
     if n_dropped:
         notes.append(f"有 {n_dropped} 篇文件在詞彙篩選後沒有任何詞，未納入分群。")
+    if dominance:
+        dom = [(c, sh) for c, (sh, size) in enumerate(dominance) if size >= 3 and sh > DOMINANT_SHARE]
+        if dom:
+            desc = "、".join(f"群 {c}（{sh:.0%}）" for c, sh in dom)
+            notes.append(f"以下群的關鍵詞有相當比例來自單一文件（括號內為該文件占群內關鍵詞出現次數的比例）："
+                         f"{desc}。這類群的關鍵詞可能反映一篇長文件，而非整群的共同主題。")
+    if keywords:
+        for i, j, common in shared_keyword_pairs(keywords):
+            notes.append(f"群 {i} 與群 {j} 的前 10 個關鍵詞有 {len(common)} 個相同（{', '.join(common)}），"
+                         "兩群不易區分，可考慮較小的群數或在命名時說明差異。")
     if k == k_range[1]:
         notes.append(f"選定的群數 k = {k} 是候選範圍的上限，更大的群數未經評估。")
     return notes
@@ -92,27 +147,42 @@ def _md_table(df):
     return "\n".join(lines)
 
 
-def build_report(ctx):
+def settings_list(ctx):
+    """設定紀錄（文字報告與 HTML 報告共用），回傳 (項目, 內容) 清單。"""
     s1, s2 = ctx["cfg1"], ctx["cfg2"]
     filt = ("不篩選" if s1["min_df"] == 1 and s1["max_df"] == 1.0
             else f"min_df = {s1['min_df']}、max_df = {s1['max_df']}")
     ngram = "單詞" if s1["ngram_max"] == 1 else "單詞＋雙詞"
-    L = ["# 文件分群報告", ""]
+    algo = s2["algorithm"]
+    seed_use = {"kmedoids": "步驟 1 SVD、步驟 2 k-medoids 初始化",
+                "spherical": "步驟 1 SVD、步驟 2 球面 k-means 初始化",
+                "hierarchical": "步驟 1 SVD（階層式分群本身沒有隨機性）"}.get(algo, "步驟 1 SVD")
+    if ctx["sil_sampled"]:
+        seed_use += "、silhouette 抽樣"
+    label = f"，標籤欄「{s1['label_col']}」" if s1.get("label_col") else "，無標籤欄"
+    ls = s1["load_stats"]
+    return [
+        ("資料", f"{s1['input']}（文字欄「{s1['text_col']}」{label}）"),
+        ("讀入與清理", f"讀入 {ls['原始列數']} 列，刪除空白列 {ls['刪除空白列']}、重複文件 {ls['刪除重複文件']}、"
+                    f"無有效詞文件 {len(s1['dropped_no_terms'])}；分析 {ctx['n']} 篇"),
+        ("語言", "英文" if s1["language"] == "en" else "中文"),
+        ("前處理", s1["preprocess"]),
+        ("斷詞", s1.get("tokenizer", "—")),
+        ("停用詞", s1["stop_words"]),
+        ("詞彙", f"{filt}；詞組範圍：{ngram}；詞彙量 {ctx['n_vocab']}"),
+        ("向量化", f"TF-IDF → Truncated SVD {s1['svd_dim']} 維 → 長度正規化"),
+        ("分群", f"{ALGORITHMS.get(algo, algo)}，cosine 距離"
+                 + (f"，{s2['n_init']} 次初始化" if algo != "hierarchical" else "")),
+        ("群數", f"候選 k = {s2['k_min']} .. {s2['k_max']}；選定 k = {ctx['k']}"),
+        ("關鍵詞", "c-TF-IDF 前 10 名"),
+        ("隨機種子", f"{s1['seed']}（{seed_use}）"),
+    ]
 
+
+def build_report(ctx):
+    L = ["# 文件分群報告", ""]
     L += ["## 設定紀錄", ""]
-    L += [f"- 資料：{s1['input']}（文字欄 `{s1['text_col']}`"
-          + (f"，標籤欄 `{s1['label_col']}`" if s1.get("label_col") else "，無標籤欄") + "）",
-          f"- 讀入 {s1['load_stats']['原始列數']} 列，刪除空白列 {s1['load_stats']['刪除空白列']}、"
-          f"重複文件 {s1['load_stats']['刪除重複文件']}、無有效詞文件 {len(s1['dropped_no_terms'])}；"
-          f"分析 {ctx['n']} 篇",
-          f"- 語言：{'英文' if s1['language'] == 'en' else '中文'}",
-          f"- 前處理：{s1['preprocess']}；斷詞：{s1.get('tokenizer', '—')}；停用詞：{s1['stop_words']}",
-          f"- 詞彙篩選：{filt}；詞組範圍：{ngram}；詞彙量 {ctx['n_vocab']}",
-          f"- 向量化：TF-IDF → Truncated SVD {s1['svd_dim']} 維 → 長度正規化",
-          f"- 分群：{ALGORITHMS.get(s2['algorithm'], s2['algorithm'])}，cosine 距離，{s2['n_init']} 次初始化",
-          f"- 候選群數 k = {s2['k_min']} .. {s2['k_max']}；選定 k = {ctx['k']}",
-          "- 關鍵詞：c-TF-IDF 前 10 名",
-          f"- 隨機種子：{s1['seed']}（步驟 1 SVD、步驟 2 k-medoids）", ""]
+    L += [f"- {a}：{b}" for a, b in settings_list(ctx)] + [""]
 
     L += ["## 各群", ""]
     L += [_md_table(ctx["cluster_table"]), ""]
@@ -206,7 +276,11 @@ def main(argv=None):
     })
     notes = data_limits(n=n, k=k, sizes=sizes, npmi_per=npmi_per, silhouette=sil,
                         eff_median=eff_median, n_dropped=len(cfg1["dropped_no_terms"]),
-                        k_range=(cfg2["k_min"], cfg2["k_max"]))
+                        k_range=(cfg2["k_min"], cfg2["k_max"]),
+                        dominance=keyword_dominance(counts, clusters, kw_idx),
+                        keywords=[c["keywords"] for c in kw["clusters"]],
+                        language=cfg1["language"], zh_ratio=cfg1.get("zh_ratio"),
+                        load_stats=cfg1["load_stats"])
 
     rows = [("silhouette", "整體", sil), ("NPMI", "整體", npmi)]
     rows += [("NPMI", f"群 {c} {names[c]}", float(v)) for c, v in enumerate(npmi_per)]
@@ -214,16 +288,41 @@ def main(argv=None):
         rows += [(m, "整體", v) for m, v in external.items()]
     metrics = pd.DataFrame(rows, columns=["指標", "範圍", "數值"])
     metrics["數值"] = metrics["數值"].round(4)
-    metrics.to_csv(out / "metrics.csv", index=False, encoding="utf-8-sig")
+    w4 = work_dir(out, "step4")
+    metrics.to_csv(w4 / "metrics.csv", index=False, encoding="utf-8-sig")   # 中間結果；指標已在報告中
 
     ctx = {"cfg1": cfg1, "cfg2": cfg2, "n": n, "n_vocab": len(vocab), "k": k,
            "merge": merge, "silhouette": sil, "sil_sampled": sil_sampled, "npmi": npmi, "external": external, "n_classes": n_classes,
            "crosstab": crosstab, "cluster_table": cluster_table, "data_notes": notes}
     report = build_report(ctx)
-    (out / "report.md").write_text(report, encoding="utf-8")
+
+    k_png = w4 / "k_selection.png"
+    plot_k_selection(pd.read_csv(w2 / "metrics_by_k.csv"), k_png, highlight_k=k)
+    overview = ""
+    if merge:
+        k_top = cfg2["k_max"]
+        top = load_json(w2 / "clusters_by_k.json")[str(k_top)]
+        overview = w4 / "dendrogram_overview.png"
+        plot_overview_dendrogram(np.load(w2 / "linkage.npy"), np.load(w2 / "labels.npz")[f"k{k_top}"],
+                                 top["keywords"], top["sizes"], range(cfg2["k_min"], k_top + 1),
+                                 overview, highlight_k=k)
+    ctx.update({
+        "algorithm_name": ALGORITHMS.get(cfg2["algorithm"], cfg2["algorithm"]),
+        "metrics_by_k": pd.read_csv(w2 / "metrics_by_k.csv"),
+        "summary1": load_json(w1 / "summary.json") if (w1 / "summary.json").exists() else None,
+        "settings": settings_list(ctx),
+        "fixed_limits": FIXED_LIMITS,
+        "images": {"k_selection": k_png,
+                   "dendrogram": w3 / "dendrogram.png" if merge else "",
+                   "dendrogram_overview": overview},
+    })
+    (out / "report.html").write_text(render_html(ctx), encoding="utf-8")
+    old_md = out / "report.md"
+    if old_md.exists():            # 舊版輸出，避免與 HTML 報告不一致
+        old_md.unlink()
 
     print(report)
-    print(f"已寫出 {out / 'metrics.csv'}、{out / 'report.md'}")
+    print(f"已寫出 {out / 'report.html'}")
 
 
 if __name__ == "__main__":

@@ -66,10 +66,10 @@ def test_chinese_pipeline(tmp_path, capsys):
 
     step3_main(["--k", "4", "--names", "甲", "乙", "丙", "丁", "--out", str(out)])
     step4_main(["--out", str(out)])
-    metrics = pd.read_csv(out / "metrics.csv", encoding="utf-8-sig")
+    metrics = pd.read_csv(out / "work" / "step4" / "metrics.csv", encoding="utf-8-sig")
     ari = metrics.loc[metrics["指標"] == "ARI", "數值"].item()
     assert ari > 0.9
-    assert "斷詞：jieba" in (out / "report.md").read_text(encoding="utf-8")
+    assert "<dt>斷詞</dt><dd>jieba" in (out / "report.html").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("ngram", ["1", "2"])

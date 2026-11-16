@@ -57,8 +57,27 @@ def cluster_linkage(L, labels, k):
     return Z
 
 
-def plot_dendrogram(Z, leaf_labels, path, title, font=None):
-    """畫出 k 群之間的樹狀圖（水平方向，群名在左側）。"""
+def cut_positions(L, ks):
+    """各群數 k 在完整樹上的切割位置（合併距離），回傳 {k: x}。
+
+    切成 k 群 = 保留最後 k − 1 次合併以外的所有合併；切割線落在
+    「剩 k 群前的最後一次合併」與「由 k 群併成 k − 1 群」兩個高度的中點。
+    """
+    n = L.shape[0] + 1
+    out = {}
+    for k in ks:
+        if 2 <= k < n:
+            out[k] = (float(L[n - k - 1, 2]) + float(L[n - k, 2])) / 2
+    return out
+
+
+def plot_dendrogram(Z, leaf_labels, path, title, font=None, cuts=None, highlight_k=None):
+    """畫出 k 群之間的樹狀圖（水平方向，群名在左側）。
+
+    cuts：{k: 合併距離}，以虛線標出各候選群數的切割位置；
+    highlight_k：以實線強調其中一個群數（報告標出選定的 k）。
+    只標示切割位置，不依合併距離推薦群數。
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -66,8 +85,9 @@ def plot_dendrogram(Z, leaf_labels, path, title, font=None):
     if font:
         plt.rcParams["font.family"] = [font, "sans-serif"]
     ink, muted, grid, color = "#0b0b0b", "#52514e", "#e4e3df", "#2a78d6"
+    cut_color, hi_color = "#9a998f", "#eb6834"
     k = Z.shape[0] + 1
-    fig, ax = plt.subplots(figsize=(7.5, 0.45 * k + 1.4), facecolor="#fcfcfb")
+    fig, ax = plt.subplots(figsize=(7.5, 0.45 * k + 1.8), facecolor="#fcfcfb")
     ax.set_facecolor("#fcfcfb")
     dendrogram(Z, orientation="right", labels=leaf_labels, ax=ax,
                color_threshold=0, above_threshold_color=color,
@@ -76,13 +96,31 @@ def plot_dendrogram(Z, leaf_labels, path, title, font=None):
         coll.set_linewidth(2)
     # 群內部的合併已省略，橫軸從第一次群間合併之前開始，避免樹被擠在右側
     lo, hi = float(Z[:, 2].min()), float(Z[:, 2].max())
-    ax.set_xlim(max(0.0, lo - 0.25 * (hi - lo) - 0.05), hi * 1.03)
-    ax.set_title(title, loc="left", fontsize=11, color=ink)
+    left = lo - 0.25 * (hi - lo) - 0.05
+    if cuts:
+        left = min(left, min(cuts.values()) - 0.05 * (hi - lo))
+    ax.set_xlim(max(0.0, left), hi * 1.03)
+
+    if cuts:
+        span = hi * 1.03 - max(0.0, left)
+        last_x = None
+        for kk, x in sorted(cuts.items(), key=lambda t: t[1]):
+            is_hi = kk == highlight_k
+            ax.axvline(x, color=hi_color if is_hi else cut_color, linewidth=1.6 if is_hi else 0.9,
+                       linestyle="-" if is_hi else (0, (3, 3)), zorder=0)
+            # 標籤太擠時略過（選定的 k 一定標示）
+            if is_hi or last_x is None or (x - last_x) > 0.075 * span:
+                ax.annotate(f"k={kk}", (x, 1.0), xycoords=("data", "axes fraction"),
+                            xytext=(0, 3), textcoords="offset points", ha="center", va="bottom",
+                            fontsize=8.5, color=hi_color if is_hi else muted,
+                            fontweight="bold" if is_hi else "normal")
+                last_x = x
+    ax.set_title(title, loc="left", fontsize=11, color=ink, pad=18 if cuts else 6)
     ax.set_xlabel("合併距離（Ward）" if font else "Merge distance (Ward)", color=muted, fontsize=10)
     ax.tick_params(colors=muted, labelsize=9)
     ax.grid(axis="x", color=grid, linewidth=0.8)
-    for s in ("top", "right", "left"):
-        ax.spines[s].set_visible(False)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
     ax.spines["bottom"].set_color(grid)
     fig.tight_layout()
     fig.savefig(path, dpi=150, facecolor=fig.get_facecolor())
