@@ -17,9 +17,13 @@ format:
     embed-resources: true
     mermaid:
       theme: neutral
+  gfm:
+    wrap: none          # 中文不在句中斷行
+    variant: +tex_math_gfm   # 行內數學式輸出為 $`…`$，避免 GitHub 在中文標點旁辨識失敗
+    # 不產生目錄：GitHub 會自動提供標題目錄，且中文標題的錨點規則與 Pandoc 不同
 ---
 
-<!-- 本文件為使用說明的唯一原始檔。修改後執行 `quarto render README.qmd` 產生 HTML。 -->
+<!-- 本文件為使用說明的唯一原始檔。修改後執行 `quarto render README.qmd`，同時產生 README.html 與 GitHub 首頁顯示的 README.md（勿直接編輯 README.md）。 -->
 
 # 第一章　動機
 
@@ -252,7 +256,7 @@ $$
 $p(w_i, w_j) = 0$ 時 NPMI 記為 $-1$。一群的 NPMI 為其前 10 個關鍵詞 $\binom{10}{2} = 45$ 個詞對的平均，整體 NPMI 再對各群取平均：
 
 $$
-\text{NPMI}_c = \frac{1}{45} \sum_{i<j} \text{NPMI}(w_i, w_j), \qquad
+\text{NPMI}_c = \frac{1}{45} \sum_{i \lt j} \text{NPMI}(w_i, w_j), \qquad
 \text{NPMI} = \frac{1}{k} \sum_{c=1}^{k} \text{NPMI}_c.
 $$
 
