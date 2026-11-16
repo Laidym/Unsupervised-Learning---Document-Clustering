@@ -20,7 +20,7 @@
 
 - 語言：依中文字元比例自動判斷。
 - 中文：內附 jieba 0.42.1 精確模式＋大詞典 `dict.txt.big`（繁簡體一律使用），只留兩字以上中文詞與 ≥ 2 字母英文詞（捨棄單字詞、數字、標點）；內建中文停用詞 `scripts/stopwords_zh.txt`（自行整理，繁簡並列）＋英文停用詞。實作在 `scripts/tokenize_zh.py`，vendor 來源與刪減記錄於 `vendor/README.md`。英文：先移除 email、網址、主機名稱（只認 edu/com/org/net/gov/mil 結尾，避免誤刪檔名）、Usenet 群組名稱（alt/comp/misc/news/rec/sci/soc/talk 開頭，排除常見副檔名；20NG 中也等於洩漏類別），依空白、標點與數字切分（只留 ≥ 2 個字母的詞），內建英文停用詞（scikit-learn 清單＋縮寫殘片 don、ve 等）。
-- TF-IDF 加權 → Truncated SVD 降至 100 維（文件數 ≤ 100 時改為 n − 1）→ 向量長度正規化為 1。
+- TF-IDF 加權 → Truncated SVD 降至 min(100, n − 1, m − 1) 維（n 為文件數、m 為篩選後詞彙量）→ 向量長度正規化為 1。
 - 20 Newsgroups 一律移除 headers、footers、quotes。
 
 可選設定（預設值標 ★）：
@@ -35,7 +35,7 @@
 ### 步驟 2　文件分群
 
 - 距離：cosine（向量已正規化）。
-- 演算法：★ 文件數 ≤ 5,000 用 k-medoids；> 5,000 用球面 k-means；階層式分群為選用。演算法需使用者確認。
+- 演算法：★ 文件數 ≤ 5,000 用 k-medoids；> 5,000 用球面 k-means；階層式分群為選用。演算法需使用者確認。5,000 為經驗值（文獻只指出 O(n²) 記憶體與時間，沒有固定門檻），README 說明實測依據；使用者已決定維持此值，不改為依記憶體自動計算。
 - 候選群數：預設 `k = 2 .. min(15, floor(n/30))`，使用者可自訂。n < 60 時無有效範圍，提示資料量不足。
 - 對每個候選 k 分群，計算 silhouette 與 NPMI，畫在同一張圖，並列出各 k 的群關鍵詞。檢查點 2 以「群數增加時的變化」摘要呈現（`describe_transition`：每個新群歸給重疊最多的舊群，列出拆開、消失、主題改變〔前 5 個關鍵詞相同 < 3〕），完整關鍵詞另列。
 

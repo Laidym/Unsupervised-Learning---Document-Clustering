@@ -28,10 +28,18 @@
 流程共四個步驟。下圖中，黃色節點為使用者決定或確認的環節，菱形為依資料自動分流之處。
 
 ``` mermaid
+---
+config:
+  flowchart:
+    subGraphTitleMargin:
+      top: 8
+      bottom: 8
+---
 flowchart TD
   A(["輸入：文件集合"]) --> B["指定文字欄位與標籤欄位<br/>（無標籤可略過）"]:::user
 
   subgraph S1["步驟 1　前處理與向量化"]
+    direction TB
     C{"語言判斷"}
     C -->|中文| D1["jieba 斷詞<br/>中文停用詞"]
     C -->|英文| D2["移除 email 與網址<br/>依空白、標點與數字切分<br/>英文停用詞"]
@@ -41,6 +49,7 @@ flowchart TD
   end
 
   subgraph S2["步驟 2　文件分群"]
+    direction TB
     N{"文件數 ≤ 5,000？"}
     N -->|是| M1["建議 k-medoids"]
     N -->|否| M2["建議球面 k-means"]
@@ -51,21 +60,22 @@ flowchart TD
   end
 
   subgraph S3["步驟 3　群關鍵詞"]
+    direction TB
     G["c-TF-IDF 萃取各群關鍵詞"] --> NM["為各群命名"]:::user
   end
 
   subgraph S4["步驟 4　評估與限制"]
+    direction TB
     I["內部指標：silhouette、NPMI"] --> J{"是否指定標籤欄？"}
     J -->|是| K["事後比對：ARI、NMI、純度"]
     J -->|否| L["略過事後比對"]
   end
 
-  B --> C
-  CP1 --> N
-  CP2 --> G
-  NM --> I
-  K --> R(["輸出：分析報告與結果檔"])
-  L --> R
+  B --> S1
+  S1 --> S2
+  S2 --> S3
+  S3 --> S4
+  S4 --> R(["輸出：分析報告與結果檔"])
 
   classDef user fill:#fdf3e1,stroke:#c58a1f,color:#6b4508
 ```
@@ -139,7 +149,7 @@ flowchart TD
 
 中文捨棄單字詞，是因為單字多為虛詞或量詞（如「的」「很」「個」），保留下來雜訊大於資訊。英文的清理與切詞規則是為了排除不帶主題意義的片段：email 與主機名稱切開後會留下 `edu`、`com` 等詞，Usenet 群組名稱（20 Newsgroups 文中常見）切開後會留下 `news`、`answers` 等詞，且等於洩漏類別名稱；年份與版本號等數字也很少有助於區分主題。
 
-min_df 為整數時代表最少出現篇數，max_df 為小數時代表最多出現比例；兩者皆以「出現在幾篇文件中」計算，而非出現次數。SVD 降至 100 維為經驗值，與 scikit-learn 官方文件分群範例相同 (<span class="nocase">scikit-learn developers</span>, n.d.)；LSA 文獻中常用數百維 (Landauer and Dumais 1997)。文件數不足 101 篇時，自動調為文件數減 1。
+min_df 為整數時代表最少出現篇數，max_df 為小數時代表最多出現比例；兩者皆以「出現在幾篇文件中」計算，而非出現次數。SVD 降至 100 維為經驗值，與 scikit-learn 官方文件分群範例相同 (<span class="nocase">scikit-learn developers</span>, n.d.)；LSA 文獻中常用數百維 (Landauer and Dumais 1997)。SVD 能取的成分數不超過矩陣的列數與行數，因此實際維度為 $`\min(100,\ n-1,\ m-1)`$，$`n`$ 為文件數、$`m`$ 為篩選後的詞彙量；文件數或詞彙量不足時自動調低。
 
 > [!NOTE]
 >
@@ -202,6 +212,8 @@ min_df 為整數時代表最少出現篇數，max_df 為小數時代表最多出
 </tr>
 </tbody>
 </table>
+
+**演算法建議的門檻 5,000 篇為經驗值，並非出自文獻。** 文獻指出的是 k-medoids 的記憶體與計算時間都隨文件數平方成長，全部文件兩兩距離的矩陣是主要瓶頸，大量資料應改用抽樣或其他方法 (Schubert and Rousseeuw 2021)，但沒有給出固定的切換篇數。以本 skill 的實作在模擬資料上實測（每個 $`k`$ 5 次初始化，候選群數 $`k = 2`$ 至 15）：5,000 篇時距離矩陣約 100 MB，評估全部候選群數約 4 分鐘；10,000 篇時增為 400 MB、約 22 分鐘，時間約為 4 倍以上。門檻取在等待時間仍適合逐步互動的範圍內。文件數超過門檻時仍可選用 k-medoids，skill 會提示需要較多記憶體與時間。
 
 **候選群數範圍**預設為 $`k = 2`$ 至 $`\min(15,\ \lfloor n/30 \rfloor)`$，$`n`$ 為文件數，使用者可自訂：
 
