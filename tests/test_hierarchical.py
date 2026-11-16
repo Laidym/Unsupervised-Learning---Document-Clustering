@@ -77,7 +77,7 @@ def test_pipeline_with_hierarchical(tmp_path, capsys):
     assert (tmp_path / "work" / "step3" / "dendrogram.png").exists()
     step3_main(["--k", "4", "--names", "甲", "乙", "丙", "丁", "--out", str(tmp_path)])
     step4_main(["--out", str(tmp_path)])
-    report = (tmp_path / "report.html").read_text(encoding="utf-8")
+    report = (tmp_path / "hierarchical_k4" / "report.html").read_text(encoding="utf-8")
     assert "階層式分群（Ward 連結）" in report and "上下層關係" in report
     assert (tmp_path / "work" / "step4" / "dendrogram_overview.png").exists()
     assert "各候選群數的切割位置" in report and report.count("data:image/png;base64,") == 3
@@ -87,6 +87,6 @@ def test_pipeline_with_hierarchical(tmp_path, capsys):
     assert not (wd2 / "linkage.npy").exists()
     step3_main(["--k", "4", "--names", "甲", "乙", "丙", "丁", "--out", str(tmp_path)])
     step4_main(["--out", str(tmp_path)])
-    assert "上下層關係" not in (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert "上下層關係" not in (tmp_path / "spherical_k4" / "report.html").read_text(encoding="utf-8")
     cfg = json.loads((wd2 / "config.json").read_text(encoding="utf-8"))
     assert cfg["algorithm"] == "spherical"

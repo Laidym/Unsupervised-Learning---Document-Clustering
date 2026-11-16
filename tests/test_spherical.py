@@ -82,7 +82,7 @@ def test_pipeline_with_spherical(tmp_path, capsys):
     kw = json.loads((tmp_path / "work" / "step3" / "keywords.json").read_text(encoding="utf-8"))
     assert kw["medoid_doc_ids"] is None
     step4_main(["--out", str(tmp_path)])
-    assert "球面 k-means（k-means++ 初始化）" in (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert "球面 k-means（k-means++ 初始化）" in (tmp_path / "spherical_k4" / "report.html").read_text(encoding="utf-8")
 
 
 def test_step2_default_algorithm_is_kmedoids_for_small_data(tmp_path):

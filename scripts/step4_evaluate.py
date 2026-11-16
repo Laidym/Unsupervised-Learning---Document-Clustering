@@ -4,7 +4,7 @@
 事後比對（自動）：步驟 1 有指定標籤欄才計算 ARI、NMI、純度；否則略過。標籤只在本步驟讀取。
 限制：固定說明四項，並依本次資料提示。
 
-輸出：<out>/report.html（單一檔案，圖片內嵌，記錄所有設定與 seed）；
+輸出：<out>/<演算法>_k<k>/report.html（單一檔案，圖片內嵌，記錄所有設定與 seed），與步驟 3 的結果檔放在一起；
 文字版報告印在標準輸出。
 
 用法：python scripts/step4_evaluate.py [--out output]
@@ -19,7 +19,7 @@ from scipy import sparse
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import DEFAULT_OUT, load_json, setup_stdout, work_dir  # noqa: E402
+from common import DEFAULT_OUT, load_json, result_dir, setup_stdout, work_dir  # noqa: E402
 from clustering import ALGORITHMS, silhouette  # noqa: E402
 from hierarchical import cluster_linkage, merge_steps  # noqa: E402
 from report_html import render as render_html  # noqa: E402
@@ -179,6 +179,14 @@ def settings_list(ctx):
     ]
 
 
+def with_totals(ct):
+    """交叉表加上各群（列）與各標籤（欄）的合計。"""
+    ct = ct.copy()
+    ct["合計"] = ct.sum(axis=1)
+    ct.loc["合計"] = ct.sum(axis=0)
+    return ct
+
+
 def build_report(ctx):
     L = ["# 文件分群報告", ""]
     L += ["## 設定紀錄", ""]
@@ -205,7 +213,8 @@ def build_report(ctx):
               f"- NMI：{e['NMI']:.3f}（0 為毫無關聯，1 為完全對應）",
               f"- 純度：{e['純度']:.3f}（群數越多越高，須搭配 ARI、NMI 解讀）",
               f"- 群數 {ctx['k']}，標籤類別數 {ctx['n_classes']}",
-              "", "群與標籤的交叉表：", "", _md_table(ctx["crosstab"].reset_index()), "",
+              "", "群與標籤的交叉表（含合計，轉述時直接引用表中數字）：", "",
+              _md_table(with_totals(ctx["crosstab"]).reset_index()), "",
               "既有分類只是一種分法，不吻合不代表分群錯誤。標籤只用於本節，未用於前處理、分群與選定群數。", ""]
 
     L += ["## 限制", ""]
@@ -316,13 +325,14 @@ def main(argv=None):
                    "dendrogram": w3 / "dendrogram.png" if merge else "",
                    "dendrogram_overview": overview},
     })
-    (out / "report.html").write_text(render_html(ctx), encoding="utf-8")
+    rpath = result_dir(out, cfg2["algorithm"], k) / "report.html"
+    rpath.write_text(render_html(ctx), encoding="utf-8")
     old_md = out / "report.md"
     if old_md.exists():            # 舊版輸出，避免與 HTML 報告不一致
         old_md.unlink()
 
     print(report)
-    print(f"已寫出 {out / 'report.html'}")
+    print(f"已寫出 {rpath}")
 
 
 if __name__ == "__main__":

@@ -10,8 +10,9 @@ Claude 依關鍵詞為每群提出建議名稱，使用者逐群採用或自訂�
   python scripts/step3_keywords.py --k 7 --names-file names.json [--suggestions-file sugg.json]
   （JSON 字串陣列，依群編號排列）
 
-輸出：<out>/clusters.csv（依群排序，同群文件相鄰；群內維持原始順序）。
-輸入為 .txt 資料夾或 zip 時，另寫出 <out>/clusters_files.zip：每群一個資料夾，放入該群的文件。
+輸出寫在 <out>/<演算法>_k<k>/（不同演算法或群數的結果分開保存，同一組合重跑時覆寫）：
+clusters.csv（依群排序，同群文件相鄰；群內維持原始順序）。
+輸入為 .txt 資料夾或 zip 時，另寫出 clusters_files.zip：每群一個資料夾，放入該群的文件。
 """
 import argparse
 import json
@@ -25,12 +26,13 @@ import pandas as pd
 from scipy import sparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import DEFAULT_OUT, cjk_font, load_json, save_json, setup_stdout, work_dir  # noqa: E402
+from common import DEFAULT_OUT, cjk_font, load_json, result_dir, save_json, setup_stdout, work_dir  # noqa: E402
 from hierarchical import cluster_linkage, merge_steps, plot_dendrogram  # noqa: E402
 from textmetrics import TOP_N, top_terms  # noqa: E402
 
 
-OLD_OUTPUTS = ("cluster_summary.csv", "metrics.csv")    # 舊版輸出，內容已在 report.html
+# 舊版直接寫在 <out>/ 的輸出：摘要與指標已在報告中，結果檔改放各次結果的目錄
+OLD_OUTPUTS = ("cluster_summary.csv", "metrics.csv", "clusters.csv", "clusters_files.zip", "report.html")
 FILES_ZIP = "clusters_files.zip"
 
 
@@ -176,12 +178,13 @@ def main(argv=None):
               wd / "names.json")
 
     clusters = sorted_clusters(docs, labels, names)
-    clusters.to_csv(out / "clusters.csv", index=False, encoding="utf-8-sig")
-    written = [out / "clusters.csv"]
+    rd = result_dir(out, load_json(s2 / "config.json")["algorithm"], args.k)
+    clusters.to_csv(rd / "clusters.csv", index=False, encoding="utf-8-sig")
+    written = [rd / "clusters.csv"]
     for f in OLD_OUTPUTS:
         if (out / f).exists():
             (out / f).unlink()
-    zpath = out / FILES_ZIP
+    zpath = rd / FILES_ZIP
     if load_json(s1 / "config.json").get("input_kind") == "files":
         write_files_zip(clusters, zpath)
         written.append(zpath)
