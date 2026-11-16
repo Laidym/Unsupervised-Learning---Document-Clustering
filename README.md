@@ -1,7 +1,7 @@
 # 文本非監督學習 Skill 使用說明
 
 
-<!-- 本文件為使用說明的唯一原始檔。修改後執行 `quarto render README.qmd`，同時產生 README.html 與 GitHub 首頁顯示的 README.md（勿直接編輯 README.md）。 -->
+<!-- 本文件為使用說明的唯一原始檔（寫法以 GitHub 顯示為準）。修改後執行 `python tools/build_readme_html.py` 重新產生 README.html，並一起 commit。 -->
 
 # 第一章　動機
 

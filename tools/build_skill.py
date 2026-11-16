@@ -4,7 +4,7 @@
 
 zip 內為單一資料夾 text-clustering/，只含執行所需檔案：
 SKILL.md、scripts/（程式與中文停用詞）、vendor/（jieba）、data/（20 Newsgroups 子集）。
-不含 tests/、tools/、README.qmd 等開發用檔案。
+不含 tests/、tools/、README.md 等開發用檔案。
 
 用法：python tools/build_skill.py
 """

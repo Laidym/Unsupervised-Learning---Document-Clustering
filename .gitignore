@@ -3,5 +3,4 @@ __pycache__/
 .venv/
 .pytest_cache/
 output/
-README.html
 README_files/
