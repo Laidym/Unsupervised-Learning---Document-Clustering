@@ -47,28 +47,64 @@ def load_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def _read_text_file(path):
-    raw = Path(path).read_bytes()
+def _decode(raw, name):
     for enc in ENCODINGS:
         try:
             return raw.decode(enc), enc
         except UnicodeDecodeError:
             continue
-    raise ValueError(f"無法判斷編碼：{path}")
+    raise ValueError(f"無法判斷編碼：{name}")
+
+
+def _read_text_file(path):
+    return _decode(Path(path).read_bytes(), path)
+
+
+def _skip(rel):
+    """略過 macOS 壓縮時附帶的 __MACOSX/、._ 檔與隱藏檔。"""
+    return any(part == "__MACOSX" or part.startswith(".") for part in rel.parts)
+
+
+def txt_files_table(items):
+    """把 (相對路徑, bytes) 轉成 DataFrame：doc_id（相對路徑）、text，有子資料夾時另加 folder。
+
+    所有檔案共用的最上層資料夾（例如壓縮時包住全部檔案的那一層）會先去掉。
+    folder 為檔案所在的資料夾（相對路徑），可當標籤欄位；不會自動當成標籤。
+    """
+    items = [(Path(r), b) for r, b in items if Path(r).suffix.lower() == ".txt" and not _skip(Path(r))]
+    if not items:
+        raise ValueError("找不到 .txt 檔。")
+    while all(len(r.parts) > 1 for r, _ in items) and len({r.parts[0] for r, _ in items}) == 1:
+        items = [(Path(*r.parts[1:]), b) for r, b in items]
+    items.sort(key=lambda x: x[0].as_posix())
+    df = pd.DataFrame({"doc_id": [r.as_posix() for r, _ in items],
+                       "text": [_decode(b, r)[0] for r, b in items]})
+    folders = [r.parent.as_posix() for r, _ in items]
+    if any(f != "." for f in folders):
+        df["folder"] = [f if f != "." else "" for f in folders]
+    return df
+
+
+def is_txt_collection(path):
+    """輸入是否為 .txt 資料夾或 zip（每個檔案一篇文件）。"""
+    path = Path(path)
+    return path.is_dir() or path.suffix.lower() == ".zip"
 
 
 def read_table(path):
-    """讀 CSV、Excel 或 .txt 資料夾，回傳 DataFrame。txt 資料夾產生 doc_id、text 兩欄。"""
+    """讀 CSV、Excel、.txt 資料夾或內含 .txt 的 zip，回傳 DataFrame。
+
+    .txt 資料夾與 zip 產生 doc_id、text 兩欄（見 txt_files_table），有子資料夾時另有 folder 欄。
+    """
     path = Path(path)
     if path.is_dir():
-        rows = []
-        for f in sorted(path.glob("*.txt")):
-            text, _ = _read_text_file(f)
-            rows.append({"doc_id": f.stem, "text": text})
-        if not rows:
-            raise ValueError(f"資料夾內沒有 .txt 檔：{path}")
-        return pd.DataFrame(rows)
+        return txt_files_table((f.relative_to(path), f.read_bytes())
+                               for f in path.rglob("*") if f.is_file())
     suffix = path.suffix.lower()
+    if suffix == ".zip":
+        import zipfile
+        with zipfile.ZipFile(path) as z:
+            return txt_files_table((i.filename, z.read(i)) for i in z.infolist() if not i.is_dir())
     if suffix in (".xlsx", ".xlsm", ".xls"):
         return pd.read_excel(path)
     if suffix in (".csv", ".tsv", ".txt"):

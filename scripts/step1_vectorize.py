@@ -30,7 +30,7 @@ from sklearn.feature_extraction.text import (
 from sklearn.preprocessing import normalize
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import DATA_20NG, DEFAULT_OUT, SEED, load_docs, load_json, save_json, setup_stdout, work_dir  # noqa: E402
+from common import DATA_20NG, DEFAULT_OUT, SEED, is_txt_collection, load_docs, load_json, save_json, setup_stdout, work_dir  # noqa: E402
 from tokenize_zh import ZhAnalyzer  # noqa: E402
 
 SVD_DIM = 100
@@ -312,8 +312,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="步驟 1　前處理與向量化")
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--dataset", choices=["20ng"], help="使用內建範例資料")
-    src.add_argument("--input", help="CSV、Excel 檔或 .txt 資料夾")
-    ap.add_argument("--text-col", help="文字欄位")
+    src.add_argument("--input", help="CSV、Excel 檔，或 .txt 資料夾／zip（每個檔案一篇文件）")
+    ap.add_argument("--text-col", help="文字欄位（.txt 資料夾／zip 免填，固定為 text）")
     ap.add_argument("--label-col", help="標籤欄位（只用於步驟 4 事後比對）")
     ap.add_argument("--id-col", help="文件編號欄位（可省略）")
     ap.add_argument("--categories", nargs="+", help="只取這些類別（20ng 用）")
@@ -326,11 +326,13 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     if args.dataset == "20ng":
-        path, text_col, label_col, id_col = DATA_20NG, "text", "label", "doc_id"
+        path, text_col, label_col, id_col, files = DATA_20NG, "text", "label", "doc_id", False
     else:
-        if not args.text_col:
+        files = is_txt_collection(args.input)
+        if not args.text_col and not files:
             ap.error("使用 --input 時必須指定 --text-col")
-        path, text_col, label_col, id_col = args.input, args.text_col, args.label_col, args.id_col
+        path, label_col, id_col = args.input, args.label_col, args.id_col
+        text_col = args.text_col or "text"
 
     docs, load_stats = load_docs(path, text_col, label_col, id_col, args.categories)
     if args.no_filter:
@@ -362,6 +364,7 @@ def main(argv=None):
     save_json(info["vocab"], wd / "vocab.json")
     config = {
         "input": str(path),
+        "input_kind": "files" if files else "table",
         "text_col": text_col,
         "label_col": label_col,
         "language": lang,

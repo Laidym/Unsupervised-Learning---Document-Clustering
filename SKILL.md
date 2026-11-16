@@ -10,7 +10,13 @@ description: 對一批沒有標籤的英文或中文（繁體、簡體）文件�
 ## 共通規則
 
 - 與使用者對話一律使用繁體中文。
-- 腳本位於本 skill 的 `scripts/`，以 `python <skill 目錄>/scripts/<腳本>` 執行，`--out` 指定輸出資料夾（預設 `output/`）。每個步驟的中間結果存在 `<out>/work/<步驟>/`，可隨時回到前面的步驟重做，之後的步驟要重新執行。
+- 路徑與執行方式：
+  - `<skill>` 代表本 SKILL.md 所在的資料夾。腳本以 `python3 <skill>/scripts/<腳本>` 執行；不要 cd 進 skill 資料夾，也不要把檔案寫進去（該資料夾可能唯讀）。
+  - 每個步驟都加上同一個 `--out <work>`，`<work>` 為可寫入的工作資料夾，建議 `/home/claude/textclust`。分析另一份資料時換一個新的資料夾。中間結果存在 `<work>/work/<步驟>/`，可隨時回到前面的步驟重做，之後的步驟要重新執行。
+  - 使用者上傳的檔案通常在 `/mnt/user-data/uploads/`。
+  - 步驟 4 完成後，把 `<work>` 裡的 `report.html`、`clusters.csv`（以及 .txt 輸入時的 `clusters_files.zip`）複製到使用者可下載的位置（claude.ai 為 `/mnt/user-data/outputs/`），並告知檔名。
+  - 執行環境沒有網路：不要 pip install、不要下載任何東西。需要的套件已內附（jieba）或內建（numpy、scipy、pandas、scikit-learn、matplotlib）。
+  - 下方的指令範例省略 `--out <work>`，執行時都要加上。
 - **標籤欄位只用於步驟 4 的事後比對。** 步驟 1–3（包括選群數）不得查看、引用或依據標籤做建議；不要讀取 `work/step1/labels.csv`。
 - 隨機種子固定為 42，不要更改。
 - 沒有判斷依據的技術細節（SVD 維度、停用詞、斷詞方式、語言）一律固定，不要詢問使用者，也不要提供更改的選項。
@@ -18,21 +24,22 @@ description: 對一批沒有標籤的英文或中文（繁體、簡體）文件�
 
 ## 步驟 0　讀取資料
 
-1. 使用者使用內建範例（20 Newsgroups）時，資料為 `data/20ng_subset.csv`，含 4 個類別各 200 篇，文字欄 `text`、標籤欄 `label`。已移除 headers、footers、quotes。直接進入步驟 1。
+1. 使用者使用內建範例（20 Newsgroups）時，資料為 `<skill>/data/20ng_subset.csv`（以 `--dataset 20ng` 讀取），含 4 個類別各 200 篇，文字欄 `text`、標籤欄 `label`。已移除 headers、footers、quotes。直接進入步驟 1。
 2. 使用者上傳自己的資料時，先讀取前幾列，列出欄位名稱，請使用者指定：
    - **文字欄位**（必填）
    - **標籤欄位**（選填，只用於最後的事後比對；說明這一點）
-   .txt 資料夾不需指定，每個檔案為一篇文件，檔名作為文件編號。
-3. 上傳的是 HTML、PDF、Word 等格式時，請使用者先轉為純文字（CSV、Excel 或 .txt）；不要自行剝除 HTML 或改寫內容。
-4. 資料看起來是網路文章（例如有新聞網站、部落格的格式）時，簡短提醒使用者：網站版面文字（導覽列、「相關新聞」、版權聲明、記者署名）、讀者留言、轉載的近似重複會影響分群，最好上傳前自行清理；步驟 1 會提示疑似版面文字。只提醒一次，不要求使用者一定要清理。
+3. 使用者上傳多個 .txt 檔（資料夾或 zip，每個檔案一篇文件）時，不要自行轉成 CSV，直接把資料夾或 zip 的路徑傳給 `--input`，也不需指定文字欄位。腳本讀取全部 .txt（含子資料夾，略過 `__MACOSX` 與隱藏檔），以相對路徑（如 `business/001.txt`）作為文件編號，避免不同資料夾的同名檔案重複。若檔案依類別放在子資料夾，會多一欄 `folder`（子資料夾名稱）：告訴使用者這可當標籤欄位（`--label-col folder`），只用於步驟 4 的事後比對，由使用者決定是否使用。多個 .txt 檔是個別上傳（沒有包成 zip）時，先把它們複製到 `<work>/input/`，再以該資料夾作為 `--input`，避免混入上傳區的其他檔案。單一 .txt 檔會被當成 CSV 讀取（每列一篇）。
+4. 上傳的是 HTML、PDF、Word 等格式時，請使用者先轉為純文字（CSV、Excel 或 .txt）；不要自行剝除 HTML 或改寫內容。
+5. 資料看起來是網路文章（例如有新聞網站、部落格的格式）時，簡短提醒使用者：網站版面文字（導覽列、「相關新聞」、版權聲明、記者署名）、讀者留言、轉載的近似重複會影響分群，最好上傳前自行清理；步驟 1 會提示疑似版面文字。只提醒一次，不要求使用者一定要清理。
 
 ## 步驟 1　前處理與向量化
 
 先以建議設定執行：
 
 ```bash
-python scripts/step1_vectorize.py --dataset 20ng
-python scripts/step1_vectorize.py --input <檔案> --text-col <文字欄> [--label-col <標籤欄>]
+python3 <skill>/scripts/step1_vectorize.py --dataset 20ng
+python3 <skill>/scripts/step1_vectorize.py --input <檔案> --text-col <文字欄> [--label-col <標籤欄>]
+python3 <skill>/scripts/step1_vectorize.py --input <.txt 資料夾或 zip> [--label-col folder]
 ```
 
 固定設定（告知使用者，但不提供更改）：依中文字元比例判斷語言；英文先移除 email、網址、主機名稱與 Usenet 群組名稱（如 news.answers），再依空白、標點與數字切分，只保留兩個字母以上的詞，並去除內建英文停用詞（含 don、ve 等縮寫殘片）；中文以內附的 jieba 精確模式斷詞（使用對繁體較佳的大詞典，繁簡體皆同），只保留兩字以上的中文詞與兩個字母以上的英文詞（單字詞、數字、標點一律捨棄），並去除內建中文停用詞；TF-IDF 加權後以 Truncated SVD 降至 100 維（文件數 ≤ 100 時為 n − 1），再將向量長度正規化為 1。
@@ -75,12 +82,12 @@ min_df、max_df 以「出現在幾篇文件」計算。使用者調整後以新�
 | 球面 k-means（文件數 > 5,000 時建議） | `--algorithm spherical` | 速度快，適用大量文件 | 群中心是平均方向，不對應真實文件；對離群文件較敏感 |
 | 階層式分群（選用） | `--algorithm hierarchical` | 可用樹狀圖呈現各群的上下層關係；不同群數的結果彼此巢狀 | 需計算全部文件兩兩距離，文件過多時記憶體不足；合併一旦發生就無法修正，群大小常較不均 |
 
-省略 `--algorithm` 時腳本採用建議的演算法。階層式分群的連結法固定為 Ward（不提供選擇）；檢查點 2 必須連同指標一起呈現樹狀圖 `work/step2/dendrogram.png`：它是切成候選上限 k 群時的合併關係，虛線標出各候選 k 的切割位置（切割線右側的分叉數即為群數）。說明較小的 k 就是沿著這棵樹往上合併，並請使用者對照：某個 k 拆開的是哪兩群、拆分是否有意義。可以指出合併距離明顯較大的位置，但不要依合併距離推薦群數（等同手肘法，已否決），群數仍由使用者綜合指標、關鍵詞與樹狀圖決定。文件數超過 5,000 時，silhouette 改以隨機抽樣 5,000 篇計算（seed 固定），腳本會提示，呈現時一併說明。
+省略 `--algorithm` 時腳本採用建議的演算法。階層式分群的連結法固定為 Ward（不提供選擇）；檢查點 2 必須連同指標一起呈現樹狀圖 `<work>/work/step2/dendrogram.png`：它是切成候選上限 k 群時的合併關係，虛線標出各候選 k 的切割位置（切割線右側的分叉數即為群數）。說明較小的 k 就是沿著這棵樹往上合併，並請使用者對照：某個 k 拆開的是哪兩群、拆分是否有意義。可以指出合併距離明顯較大的位置，但不要依合併距離推薦群數（等同手肘法，已否決），群數仍由使用者綜合指標、關鍵詞與樹狀圖決定。文件數超過 5,000 時，silhouette 改以隨機抽樣 5,000 篇計算（seed 固定），腳本會提示，呈現時一併說明。
 
 候選群數預設為 k = 2 .. min(15, ⌊n/30⌋)，告知使用者並詢問是否沿用；使用者可自訂。文件數少於 60 篇時腳本會停止並說明資料量不足，此時告知使用者，若仍要分群需自訂範圍。
 
 ```bash
-python scripts/step2_cluster.py [--k-min <下限> --k-max <上限>]
+python3 <skill>/scripts/step2_cluster.py [--k-min <下限> --k-max <上限>]
 ```
 
 每個 k 約需 1–2 秒（800 篇）；執行前告知使用者大約時間。
@@ -90,7 +97,7 @@ python scripts/step2_cluster.py [--k-min <下限> --k-max <上限>]
 依腳本輸出，向使用者呈現：
 
 1. 各 k 的指標表（silhouette、NPMI、最小／最大群文件數）。
-2. 指標圖 `work/step2/k_selection.png`（上方 silhouette、下方 NPMI，共用 k 軸）。
+2. 指標圖 `<work>/work/step2/k_selection.png`（上方 silhouette、下方 NPMI，共用 k 軸）。圖要讓使用者看得到：複製到使用者可下載的位置（claude.ai 為 `/mnt/user-data/outputs/`）並告知；樹狀圖同理。
 3. 腳本的「群數增加時的變化」段落：列出最小 k 的各群，以及每增加一群時哪一群被拆開、哪一群消失或主題改變（每群以前 3 個關鍵詞表示）。以這段取代逐一列出每個 k 的關鍵詞；使用者想看某個 k 的完整 10 個關鍵詞時，再從「各 k 的完整關鍵詞」列出。k-medoids 與球面 k-means 的結果不是巢狀的，增加一群時可能同時有多群重組，如實說明即可。
 4. 腳本的「提示」段落，並說明：
    - silhouette 與 NPMI 的意義，以及 silhouette 在文字資料通常偏低，只宜比較相對高低。
@@ -105,7 +112,7 @@ python scripts/step2_cluster.py [--k-min <下限> --k-max <上限>]
 使用者在檢查點 2 選定 k 後執行。k 必須在步驟 2 跑過的範圍內，否則腳本會停止，需先以包含該 k 的範圍重跑步驟 2。
 
 ```bash
-python scripts/step3_keywords.py --k <群數>
+python3 <skill>/scripts/step3_keywords.py --k <群數>
 ```
 
 關鍵詞固定以 c-TF-IDF 取每群前 10 個，沒有可選設定，不要詢問。
@@ -113,7 +120,7 @@ python scripts/step3_keywords.py --k <群數>
 ### 命名
 
 1. 以表格呈現各群：群編號、文件數與比例、前 10 個關鍵詞，以及你提出的**建議名稱**。簡短說明 c-TF-IDF 突顯「此群有、其他群少見」的詞；文件數很少的群，關鍵詞較不穩定。
-   使用階層式分群時，腳本另外印出「各群合併關係」並畫出 `work/step3/dendrogram.png`。一併呈現，並說明越早合併的群內容越接近；命名時可利用這點讓相近的群名稱有共同的上層概念（例如「棒球：賽事」「棒球：閒聊」）。
+   使用階層式分群時，腳本另外印出「各群合併關係」並畫出 `<work>/work/step3/dendrogram.png`（同樣複製給使用者）。一併呈現，並說明越早合併的群內容越接近；命名時可利用這點讓相近的群名稱有共同的上層概念（例如「棒球：賽事」「棒球：閒聊」）。
 2. 建議名稱的規則：
    - 每群一個，使用繁體中文，簡短（約 2–8 字）。
    - **只能依據表格中的 10 個關鍵詞。** 不得參考標籤欄、資料集原有的類別名稱（例如 20 Newsgroups 的新聞群組名稱），也不要閱讀文件內容。
@@ -129,20 +136,20 @@ python scripts/step3_keywords.py --k <群數>
 5. 名稱確定後，依群編號順序執行，同時傳入建議名稱，以記錄每個名稱是採用建議還是自訂：
 
 ```bash
-python scripts/step3_keywords.py --k <群數> --names <群0名稱> ... --suggestions <群0建議> ...
+python3 <skill>/scripts/step3_keywords.py --k <群數> --names <群0名稱> ... --suggestions <群0建議> ...
 ```
 
-名稱含空白或特殊字元時，改寫成 JSON 字串陣列檔，以 `--names-file`、`--suggestions-file` 傳入。腳本寫出 `<out>/clusters.csv` 與 `<out>/cluster_summary.csv`，並在有重複名稱時提示，此時詢問使用者是否改名。不提供代表文件或代表句。
+名稱含空白或特殊字元時，改寫成 JSON 字串陣列檔，以 `--names-file`、`--suggestions-file` 傳入。腳本寫出 `<out>/clusters.csv`（依群排序，同群文件相鄰）；輸入為 .txt 資料夾或 zip 時，另寫出 `<out>/clusters_files.zip`（每群一個資料夾，放入該群的文件）。有重複名稱時腳本會提示，此時詢問使用者是否改名。不提供代表文件或代表句。
 
 ## 步驟 4　評估與限制
 
 命名完成後執行，不需使用者再做選擇：
 
 ```bash
-python scripts/step4_evaluate.py
+python3 <skill>/scripts/step4_evaluate.py
 ```
 
-腳本寫出 `<out>/metrics.csv` 與 `<out>/report.html`，並在標準輸出印出文字版報告。依文字版報告向使用者說明（不需讀取 HTML）：
+腳本寫出 `<out>/report.html`，並在標準輸出印出文字版報告。依文字版報告向使用者說明（不需讀取 HTML）：
 
 1. **內部指標**：silhouette 與 NPMI 的數值與意義；silhouette 偏低在文字資料很常見，只宜相對比較。
 2. **事後比對**（只有指定標籤欄時）：ARI、NMI、純度與交叉表。說明：
@@ -157,9 +164,8 @@ python scripts/step4_evaluate.py
 
 | 檔案 | 內容 |
 |---|---|
-| `clusters.csv` | doc_id, text, cluster, 群名稱 |
-| `cluster_summary.csv` | cluster, 群名稱, 文件數, 關鍵詞 |
-| `metrics.csv` | 指標, 範圍（整體或各群）, 數值 |
+| `clusters.csv` | doc_id, text, cluster, 群名稱；依群排序，同群文件相鄰，群內維持原始順序 |
+| `clusters_files.zip` | 僅限 .txt 資料夾或 zip 輸入：每群一個資料夾（群編號_群名稱），放入該群的文件 |
 | `report.html` | 單一 HTML 檔（圖片內嵌、不需網路）：摘要、各群（名稱、名稱來源、文件數、NPMI、關鍵詞）、階層式分群的合併關係、群數選擇圖（標出選定的 k）、內部指標、事後比對與交叉表、限制、詞彙摘要、設定紀錄（含隨機種子） |
 
 使用者之後要求修改任何步驟（例如改 min_df、改群數、改名稱）時，從該步驟重跑，並依序重跑之後的步驟。

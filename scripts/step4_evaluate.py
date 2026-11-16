@@ -4,7 +4,7 @@
 事後比對（自動）：步驟 1 有指定標籤欄才計算 ARI、NMI、純度；否則略過。標籤只在本步驟讀取。
 限制：固定說明四項，並依本次資料提示。
 
-輸出：<out>/metrics.csv、<out>/report.html（單一檔案，圖片內嵌，記錄所有設定與 seed）；
+輸出：<out>/report.html（單一檔案，圖片內嵌，記錄所有設定與 seed）；
 文字版報告印在標準輸出。
 
 用法：python scripts/step4_evaluate.py [--out output]
@@ -288,14 +288,14 @@ def main(argv=None):
         rows += [(m, "整體", v) for m, v in external.items()]
     metrics = pd.DataFrame(rows, columns=["指標", "範圍", "數值"])
     metrics["數值"] = metrics["數值"].round(4)
-    metrics.to_csv(out / "metrics.csv", index=False, encoding="utf-8-sig")
+    w4 = work_dir(out, "step4")
+    metrics.to_csv(w4 / "metrics.csv", index=False, encoding="utf-8-sig")   # 中間結果；指標已在報告中
 
     ctx = {"cfg1": cfg1, "cfg2": cfg2, "n": n, "n_vocab": len(vocab), "k": k,
            "merge": merge, "silhouette": sil, "sil_sampled": sil_sampled, "npmi": npmi, "external": external, "n_classes": n_classes,
            "crosstab": crosstab, "cluster_table": cluster_table, "data_notes": notes}
     report = build_report(ctx)
 
-    w4 = work_dir(out, "step4")
     k_png = w4 / "k_selection.png"
     plot_k_selection(pd.read_csv(w2 / "metrics_by_k.csv"), k_png, highlight_k=k)
     overview = ""
@@ -322,7 +322,7 @@ def main(argv=None):
         old_md.unlink()
 
     print(report)
-    print(f"已寫出 {out / 'metrics.csv'}、{out / 'report.html'}")
+    print(f"已寫出 {out / 'report.html'}")
 
 
 if __name__ == "__main__":

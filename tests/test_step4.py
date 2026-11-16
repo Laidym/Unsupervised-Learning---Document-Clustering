@@ -52,7 +52,8 @@ def _pipeline(out, step1_args):
 
 def test_with_labels(tmp_path, capsys):
     _pipeline(tmp_path, ["--dataset", "20ng"])
-    m = pd.read_csv(tmp_path / "metrics.csv", encoding="utf-8-sig")
+    assert not (tmp_path / "metrics.csv").exists()                # 指標只放在報告中
+    m = pd.read_csv(tmp_path / "work" / "step4" / "metrics.csv", encoding="utf-8-sig")
     assert {"silhouette", "NPMI", "ARI", "NMI", "純度"} <= set(m["指標"])
     assert (m["範圍"] == "整體").sum() == 5
     report = (tmp_path / "report.html").read_text(encoding="utf-8")
@@ -68,7 +69,7 @@ def test_without_labels(tmp_path):
     pd.read_csv(DATA_20NG)[["text"]].rename(columns={"text": "內容"}).to_csv(f, index=False)
     out = tmp_path / "out"
     _pipeline(out, ["--input", str(f), "--text-col", "內容"])
-    m = pd.read_csv(out / "metrics.csv", encoding="utf-8-sig")
+    m = pd.read_csv(out / "work" / "step4" / "metrics.csv", encoding="utf-8-sig")
     assert not {"ARI", "NMI", "純度"} & set(m["指標"])
     assert "略過事後比對" in (out / "report.html").read_text(encoding="utf-8")
 

@@ -12,7 +12,7 @@
 
 ## 流程（四步驟）
 
-讀取資料時，請使用者指定**文字欄位**與**標籤欄位**（無標籤可略過）。
+讀取資料時，請使用者指定**文字欄位**與**標籤欄位**（無標籤可略過）。也接受 .txt 資料夾或 zip（每個檔案一篇文件，`common.read_table`）：文件編號為相對路徑，有子資料夾時另產生 `folder` 欄，由使用者決定是否當標籤欄。
 
 ### 步驟 1　前處理與向量化
 
@@ -81,6 +81,7 @@ skill 最終在 claude.ai 的沙盒執行，**通常沒有網路**，不能 pip 
 
 ```
 SKILL.md            給 Claude 的執行指令（含檢查點互動方式）
+text-clustering.zip 安裝用的 skill 套件（tools/build_skill.py 產生）
 README.qmd          使用說明原始檔；references.bib、references.csl 為其文獻與樣式
 CLAUDE.md           本檔
 scripts/            分析程式（各步驟可獨立執行，中間結果存檔以支援回到前一步重做）
@@ -89,7 +90,7 @@ data/               20 Newsgroups 範例子集
 tests/              測試
 ```
 
-輸出（`output/`）：`report.html`、`clusters.csv`（doc_id, text, cluster, 群名稱）、`cluster_summary.csv`（cluster, 群名稱, 文件數, 關鍵詞）、`metrics.csv`。
+輸出（`output/`）：`report.html`、`clusters.csv`（doc_id, text, cluster, 群名稱；依群穩定排序，同群文件相鄰）；輸入為 .txt 資料夾或 zip 時另有 `clusters_files.zip`（每群一個資料夾「群編號_群名稱」，檔名為原始相對路徑，子資料夾以 `__` 連接）。群摘要與指標只放在報告中，不另輸出 CSV（指標的中間結果在 `work/step4/metrics.csv`）。
 
 ## 開發順序
 
@@ -113,3 +114,4 @@ tests/              測試
 - 修改流程或預設值時，`README.qmd` 與 `SKILL.md` 必須同步更新。
 - `README.qmd` 的參考文獻用 `[@key]` 引用 `references.bib`；新增或刪除方法時同步增刪文獻，不保留未引用的條目。
 - 產生 HTML：`quarto render README.qmd`。
+- 安裝用的 `text-clustering.zip` 放在 repo 根目錄並納入版本控制，由 `python tools/build_skill.py` 產生（只含 SKILL.md、scripts/、vendor/、data/，換行一律 LF）。修改這些內容後，commit 前必須重新打包，讓 zip 與原始碼一致。

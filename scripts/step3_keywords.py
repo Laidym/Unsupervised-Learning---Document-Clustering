@@ -9,10 +9,15 @@ Claude 依關鍵詞為每群提出建議名稱，使用者逐群採用或自訂�
   python scripts/step3_keywords.py --k 7 --names 名稱0 名稱1 ... [--suggestions 建議0 建議1 ...]
   python scripts/step3_keywords.py --k 7 --names-file names.json [--suggestions-file sugg.json]
   （JSON 字串陣列，依群編號排列）
+
+輸出：<out>/clusters.csv（依群排序，同群文件相鄰；群內維持原始順序）。
+輸入為 .txt 資料夾或 zip 時，另寫出 <out>/clusters_files.zip：每群一個資料夾，放入該群的文件。
 """
 import argparse
 import json
+import re
 import sys
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +28,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import DEFAULT_OUT, cjk_font, load_json, save_json, setup_stdout, work_dir  # noqa: E402
 from hierarchical import cluster_linkage, merge_steps, plot_dendrogram  # noqa: E402
 from textmetrics import TOP_N, top_terms  # noqa: E402
+
+
+OLD_OUTPUTS = ("cluster_summary.csv", "metrics.csv")    # 舊版輸出，內容已在 report.html
+FILES_ZIP = "clusters_files.zip"
+
+
+def sorted_clusters(docs, labels, names):
+    """同群文件相鄰；群內維持原始順序（穩定排序）。"""
+    df = docs.assign(cluster=labels, 群名稱=[names[c] for c in labels])
+    return df.sort_values("cluster", kind="stable").reset_index(drop=True)
+
+
+def _safe(name):
+    return re.sub(r'[\\/:*?"<>|\s]+', "_", name).strip("._") or "未命名"
+
+
+def write_files_zip(clusters, path):
+    """每群一個資料夾（群編號_群名稱），檔名為原始相對路徑（子資料夾以 __ 連接）。"""
+    width = len(str(clusters["cluster"].max()))
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for doc_id, text, c, name in clusters[["doc_id", "text", "cluster", "群名稱"]].itertuples(index=False):
+            folder = f"{c:0{width}d}_{_safe(name)}"
+            z.writestr(f"{folder}/{doc_id.replace('/', '__')}", text)
 
 
 def cluster_keywords(counts, labels, k, vocab):
@@ -147,14 +175,18 @@ def main(argv=None):
     save_json({"k": args.k, "names": names, "suggestions": suggestions, "sources": sources},
               wd / "names.json")
 
-    clusters = docs.assign(cluster=labels, 群名稱=[names[c] for c in labels])
+    clusters = sorted_clusters(docs, labels, names)
     clusters.to_csv(out / "clusters.csv", index=False, encoding="utf-8-sig")
-    pd.DataFrame({
-        "cluster": [r["cluster"] for r in rows],
-        "群名稱": names,
-        "文件數": [r["size"] for r in rows],
-        "關鍵詞": [", ".join(r["keywords"]) for r in rows],
-    }).to_csv(out / "cluster_summary.csv", index=False, encoding="utf-8-sig")
+    written = [out / "clusters.csv"]
+    for f in OLD_OUTPUTS:
+        if (out / f).exists():
+            (out / f).unlink()
+    zpath = out / FILES_ZIP
+    if load_json(s1 / "config.json").get("input_kind") == "files":
+        write_files_zip(clusters, zpath)
+        written.append(zpath)
+    elif zpath.exists():
+        zpath.unlink()
 
     print()
     print("群名稱：")
@@ -165,7 +197,7 @@ def main(argv=None):
     if dup:
         print(f"注意：有重複的群名稱（{'、'.join(dup)}），可考慮合併或改名。")
     print()
-    print(f"已寫出 {out / 'clusters.csv'}、{out / 'cluster_summary.csv'}")
+    print(f"已寫出 {'、'.join(map(str, written))}")
 
 
 if __name__ == "__main__":
