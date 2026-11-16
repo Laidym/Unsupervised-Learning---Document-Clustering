@@ -256,7 +256,7 @@ $$
 $p(w_i, w_j) = 0$ 時 NPMI 記為 $-1$。一群的 NPMI 為其前 10 個關鍵詞 $\binom{10}{2} = 45$ 個詞對的平均，整體 NPMI 再對各群取平均：
 
 $$
-\text{NPMI}_c = \frac{1}{45} \sum_{i<j} \text{NPMI}(w_i, w_j), \qquad
+\text{NPMI}_c = \frac{1}{45} \sum_{i \lt j} \text{NPMI}(w_i, w_j), \qquad
 \text{NPMI} = \frac{1}{k} \sum_{c=1}^{k} \text{NPMI}_c.
 $$
 
