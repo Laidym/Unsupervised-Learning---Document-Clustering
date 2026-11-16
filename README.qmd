@@ -17,9 +17,12 @@ format:
     embed-resources: true
     mermaid:
       theme: neutral
+  gfm:
+    wrap: none          # 中文不在句中斷行
+    # 不產生目錄：GitHub 會自動提供標題目錄，且中文標題的錨點規則與 Pandoc 不同
 ---
 
-<!-- 本文件為使用說明的唯一原始檔。修改後執行 `quarto render README.qmd` 產生 HTML。 -->
+<!-- 本文件為使用說明的唯一原始檔。修改後執行 `quarto render README.qmd`，同時產生 README.html 與 GitHub 首頁顯示的 README.md（勿直接編輯 README.md）。 -->
 
 # 第一章　動機
 
