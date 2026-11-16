@@ -46,10 +46,10 @@ def test_keywords_without_names(out):
 def test_names_write_outputs(out):
     names = ["甲", "乙", "丙", "丁"]
     step3_main(["--k", "4", "--names", *names, "--out", str(out)])
-    clusters = pd.read_csv(out / "clusters.csv", encoding="utf-8-sig", dtype={"doc_id": str})
+    clusters = pd.read_csv(out / "kmedoids_k4" / "clusters.csv", encoding="utf-8-sig", dtype={"doc_id": str})
     assert list(clusters.columns) == ["doc_id", "text", "cluster", "群名稱"]
     assert (clusters["群名稱"] == clusters["cluster"].map(dict(enumerate(names)))).all()
-    assert not (out / "cluster_summary.csv").exists() and not (out / "clusters_files.zip").exists()
+    assert not (out / "cluster_summary.csv").exists() and not (out / "kmedoids_k4" / "clusters_files.zip").exists()
     # 依群排序、群內維持原始順序
     assert clusters["cluster"].is_monotonic_increasing
     docs = pd.read_csv(out / "work" / "step1" / "docs.csv", dtype={"doc_id": str})
@@ -81,3 +81,14 @@ def test_missing_k_and_wrong_name_count(out):
         step3_main(["--k", "9", "--out", str(out)])
     with pytest.raises(SystemExit, match="需要 4 個"):
         step3_main(["--k", "4", "--names", "a", "--out", str(out)])
+
+
+def test_results_kept_per_algorithm_and_k(out):
+    """不同群數的結果分開保存；舊版寫在 <out>/ 的結果檔會被移除。"""
+    (out / "clusters.csv").write_text("old", encoding="utf-8")
+    step3_main(["--k", "3", "--names", "一", "二", "三", "--out", str(out)])
+    step3_main(["--k", "4", "--names", "甲", "乙", "丙", "丁", "--out", str(out)])
+    k3 = pd.read_csv(out / "kmedoids_k3" / "clusters.csv", encoding="utf-8-sig")
+    k4 = pd.read_csv(out / "kmedoids_k4" / "clusters.csv", encoding="utf-8-sig")
+    assert set(k3["群名稱"]) == {"一", "二", "三"} and set(k4["群名稱"]) == {"甲", "乙", "丙", "丁"}
+    assert not (out / "clusters.csv").exists()

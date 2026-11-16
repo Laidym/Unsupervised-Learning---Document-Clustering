@@ -14,7 +14,8 @@ description: 對一批沒有標籤的英文或中文（繁體、簡體）文件�
   - `<skill>` 代表本 SKILL.md 所在的資料夾。腳本以 `python3 <skill>/scripts/<腳本>` 執行；不要 cd 進 skill 資料夾，也不要把檔案寫進去（該資料夾可能唯讀）。
   - 每個步驟都加上同一個 `--out <work>`，`<work>` 為可寫入的工作資料夾，建議 `/home/claude/textclust`。分析另一份資料時換一個新的資料夾。中間結果存在 `<work>/work/<步驟>/`，可隨時回到前面的步驟重做，之後的步驟要重新執行。
   - 使用者上傳的檔案通常在 `/mnt/user-data/uploads/`。
-  - 步驟 4 完成後，把 `<work>` 裡的 `report.html`、`clusters.csv`（以及 .txt 輸入時的 `clusters_files.zip`）複製到使用者可下載的位置（claude.ai 為 `/mnt/user-data/outputs/`），並告知檔名。
+  - 結果檔依演算法與群數分開存放在 `<work>/<演算法>_k<k>/`（例如 `kmedoids_k8/`、`hierarchical_k5/`），同一份資料換演算法或群數再做一次時，之前的結果會保留，不要自行改檔名；同一演算法與群數重做時會覆寫（例如只改了命名或步驟 1 的設定），若使用者想保留舊版，覆寫前先把該資料夾複製一份。
+  - 步驟 4 完成後，把該次結果資料夾整個複製到使用者可下載的位置（claude.ai 為 `/mnt/user-data/outputs/`，保留資料夾名稱），並告知路徑與檔名。
   - 執行環境沒有網路：不要 pip install、不要下載任何東西。需要的套件已內附（jieba）或內建（numpy、scipy、pandas、scikit-learn、matplotlib）。
   - 下方的指令範例省略 `--out <work>`，執行時都要加上。
 - **標籤欄位只用於步驟 4 的事後比對。** 步驟 1–3（包括選群數）不得查看、引用或依據標籤做建議；不要讀取 `work/step1/labels.csv`。
@@ -140,7 +141,7 @@ python3 <skill>/scripts/step3_keywords.py --k <群數>
 python3 <skill>/scripts/step3_keywords.py --k <群數> --names <群0名稱> ... --suggestions <群0建議> ...
 ```
 
-名稱含空白或特殊字元時，改寫成 JSON 字串陣列檔，以 `--names-file`、`--suggestions-file` 傳入。腳本寫出 `<out>/clusters.csv`（依群排序，同群文件相鄰）；輸入為 .txt 資料夾或 zip 時，另寫出 `<out>/clusters_files.zip`（每群一個資料夾，放入該群的文件）。有重複名稱時腳本會提示，此時詢問使用者是否改名。不提供代表文件或代表句。
+名稱含空白或特殊字元時，改寫成 JSON 字串陣列檔，以 `--names-file`、`--suggestions-file` 傳入。腳本寫出 `<out>/<演算法>_k<k>/clusters.csv`（依群排序，同群文件相鄰）；輸入為 .txt 資料夾或 zip 時，另寫出同資料夾的 `clusters_files.zip`（每群一個資料夾，放入該群的文件）。有重複名稱時腳本會提示，此時詢問使用者是否改名。不提供代表文件或代表句。
 
 ## 步驟 4　評估與限制
 
@@ -150,7 +151,11 @@ python3 <skill>/scripts/step3_keywords.py --k <群數> --names <群0名稱> ... 
 python3 <skill>/scripts/step4_evaluate.py
 ```
 
-腳本寫出 `<out>/report.html`，並在標準輸出印出文字版報告。依文字版報告向使用者說明（不需讀取 HTML）：
+腳本寫出 `<out>/<演算法>_k<k>/report.html`，並在標準輸出印出文字版報告。依文字版報告向使用者說明（不需讀取 HTML）。
+
+**轉述數字與限制時以報告為準**：指標、交叉表的數字直接引用報告，不要自行加總、相減或推算報告沒有的數字（交叉表已附各群與各標籤的合計）；描述某類別的文件分散在哪些群時，逐格對照該標籤那一欄，不要憑印象。限制照報告的意思轉述，不要改寫成不同的說法（例如群名稱是「由使用者決定，可採用建議名稱」，不是「不是模型產生的」）。
+
+說明內容：
 
 1. **內部指標**：silhouette 與 NPMI 的數值與意義；silhouette 偏低在文字資料很常見，只宜相對比較。
 2. **事後比對**（只有指定標籤欄時）：ARI、NMI、純度與交叉表。說明：
@@ -161,7 +166,7 @@ python3 <skill>/scripts/step4_evaluate.py
    沒有標籤欄時，告知已略過事後比對。
 3. **限制**：四項固定限制，以及「依本次資料」的提示。
 
-最後列出輸出檔：
+最後列出輸出檔（都在 `<演算法>_k<k>/` 資料夾中）：
 
 | 檔案 | 內容 |
 |---|---|

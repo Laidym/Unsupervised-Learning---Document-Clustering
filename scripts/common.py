@@ -39,6 +39,13 @@ def work_dir(out_dir, step):
     return d
 
 
+def result_dir(out_dir, algorithm, k):
+    """結果檔目錄 <out>/<演算法>_k<k>/：不同演算法或群數的結果分開保存，同一組合重跑時覆寫。"""
+    d = Path(out_dir) / f"{algorithm}_k{k}"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def save_json(obj, path):
     Path(path).write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
 

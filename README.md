@@ -413,8 +413,10 @@ HTML 網頁、PDF、Word 等格式需先轉為純文字。skill 會自動處理�
 
 ## 4.5　輸出
 
+每次分析的結果依演算法與群數放在各自的資料夾（如 `kmedoids_k8/`、`hierarchical_k5/`），換演算法或群數再做一次時，之前的結果會保留，方便對照；同一演算法與群數重做時會覆寫。
+
 ``` text
-output/
+kmedoids_k8/
 ├── report.html          分析報告：各群名稱、文件數與關鍵詞，評估指標、圖表、限制與設定紀錄
 ├── clusters.csv         doc_id, text, cluster, 群名稱（依群排序，同群文件相鄰；群內維持原始順序）
 └── clusters_files.zip   僅限 .txt 輸入：每群一個資料夾（群編號_群名稱），放入該群的文件
