@@ -53,13 +53,18 @@ _EN_NOISE = re.compile(
     r"\S+@\S+"                                            # email
     r"|(?:https?|ftp)://\S+|\bwww\.\S+"                   # 網址
     r"|\b(?:[a-z0-9-]+\.)+(?:edu|com|org|net|gov|mil)"    # 主機名稱
-    r"(?:\.[a-z]{2})?\b(?:/\S*)?",
+    r"(?:\.[a-z]{2})?\b(?:/\S*)?"
+    # Usenet 新聞群組名稱（如 news.answers、sci.space）：切開後留下 news、answers 等殘片，
+    # 在 20 Newsgroups 中也等於洩漏類別名稱
+    r"|\b(?:alt|comp|misc|news|rec|sci|soc|talk)"
+    r"\.(?!(?:txt|text|doc|pdf|ps|gif|jpe?g|png|tiff?|bmp|zip|gz|tar|z|exe|c|h|html?)\b)"  # 排除檔名
+    r"[a-z][a-z0-9+-]*(?:\.[a-z0-9+-]+)*",
     re.IGNORECASE,
 )
 
 
 def clean_en(text):
-    """英文前處理：移除 email、網址與主機名稱，轉小寫。"""
+    """英文前處理：移除 email、網址、主機名稱與 Usenet 群組名稱，轉小寫。"""
     return _EN_NOISE.sub(" ", text).lower()
 
 _CJK = re.compile("[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
@@ -80,13 +85,14 @@ def fixed_settings(lang):
     """記錄於 config.json 與報告的固定前處理設定。"""
     if lang == "zh":
         return {
-            "preprocess": "移除 email、網址、主機名稱；英文轉小寫",
+            "preprocess": "移除 email、網址、主機名稱、Usenet 群組名稱；英文轉小寫",
             "tokenizer": "jieba 0.42.1 精確模式（內附 dict.txt.big）；只保留兩字以上中文詞與兩個字母以上英文詞",
             "stop_words": "內建中文停用詞（本專案整理）＋英文停用詞",
         }
     return {
-        "preprocess": "移除 email、網址、主機名稱；轉小寫",
-        "tokenizer": f"依空白、標點與數字切分（{EN_TOKEN_PATTERN}）",
+        "preprocess": "移除 email、網址、主機名稱、Usenet 群組名稱；轉小寫",
+        "tokenizer": "依空白、標點與數字切分，只保留兩個字母以上的詞",
+        "token_pattern": EN_TOKEN_PATTERN,     # 只存檔供重現，不顯示在報告
         "stop_words": "scikit-learn ENGLISH_STOP_WORDS＋英文縮寫殘片",
     }
 
@@ -159,6 +165,31 @@ def _top_terms_table(counts, vocab, idx, top_n):
          "出現比例": round(term_df[i] / counts.shape[0], 3)}
         for i in order
     ]
+
+
+REPEAT_MIN_CHARS = 10        # 少於此字數（不含空白）的句子不檢查
+REPEAT_SHARE = 0.2           # 出現在超過此比例的文件中，視為疑似版面文字
+REPEAT_MIN_DOCS = 3
+REPEAT_SHOW = 10
+
+_SENT_SPLIT = re.compile(r"[\r\n]+|(?<=[。！？!?])|(?<=[.;])\s+")
+
+
+def repeated_sentences(texts):
+    """找出出現在許多文件中的相同句子（疑似網站版面文字、署名、版權聲明）。
+
+    以換行與句末標點切句，忽略過短的句子；比對時合併連續空白。
+    回傳 [(句子, 出現篇數)]，依篇數由多到少排列。只提示，不自動刪除。
+    """
+    from collections import Counter
+    n = len(texts)
+    df = Counter()
+    for t in texts:
+        sents = {re.sub(r"\s+", " ", x).strip() for x in _SENT_SPLIT.split(t)}
+        df.update(x for x in sents if len(re.sub(r"\s", "", x)) >= REPEAT_MIN_CHARS)
+    threshold = max(REPEAT_MIN_DOCS, REPEAT_SHARE * n)
+    hits = [(x, c) for x, c in df.items() if c >= threshold]
+    return sorted(hits, key=lambda t: (-t[1], t[0]))
 
 
 def summarize(docs, counts, vocab, top_n=20, top_bigrams=15, lang="en"):
@@ -245,6 +276,16 @@ def print_checkpoint(load_stats, lang, ratio, settings, info, summary, n_dropped
         print(compare.to_string(index=False))
 
     notes = []
+    rep = summary.get("重複出現的句子", [])
+    if rep:
+        notes.append(f"有 {len(rep)} 個句子出現在 {REPEAT_SHARE:.0%} 以上的文件中，疑似網站版面文字"
+                     "（導覽列、署名、版權聲明等），可能讓文件依來源而非主題分群。"
+                     "如確定是版面文字，請自行從原始資料移除後重新上傳：")
+        for x, c in rep[:REPEAT_SHOW]:
+            shown = x if len(x) <= 60 else x[:60] + "…"
+            notes.append(f"    「{shown}」（{c} 篇，{c / summary['文件數']:.0%}）")
+        if len(rep) > REPEAT_SHOW:
+            notes.append(f"    ……另有 {len(rep) - REPEAT_SHOW} 句")
     if summary["有效詞數少於 5 的文件"]:
         notes.append(f"有 {summary['有效詞數少於 5 的文件']} 篇文件的有效詞數少於 5，分群依據較少。")
     if summary["文件數"] < 60:
@@ -253,7 +294,7 @@ def print_checkpoint(load_stats, lang, ratio, settings, info, summary, n_dropped
         print()
         print("提示：")
         for s in notes:
-            print(f"- {s}")
+            print(s if s.startswith("    ") else f"- {s}")
 
 
 def _load_previous(wd, path):
@@ -306,6 +347,7 @@ def main(argv=None):
     dropped = docs.drop(index=info["keep"])
     docs = docs.iloc[info["keep"]].reset_index(drop=True)
     summary = summarize(docs, info["counts"], info["vocab"], lang=lang)
+    summary["重複出現的句子"] = [list(t) for t in repeated_sentences(docs["text"].tolist())]
 
     wd = work_dir(args.out, "step1")
     previous = _load_previous(wd, path)

@@ -20,7 +20,7 @@ from clustering import (  # noqa: E402
     suggest_algorithm,
 )
 from common import DEFAULT_OUT, SEED, cjk_font, load_json, save_json, setup_stdout, work_dir  # noqa: E402
-from hierarchical import build_linkage, cluster_linkage, plot_dendrogram  # noqa: E402
+from hierarchical import build_linkage, cluster_linkage, cut_positions, plot_dendrogram  # noqa: E402
 from kmedoids import cosine_distance_matrix  # noqa: E402
 from textmetrics import cluster_npmi, top_terms  # noqa: E402
 
@@ -54,8 +54,11 @@ def run_k(vectors, D, counts, vocab, k, algorithm, seed=SEED, n_init=N_INIT, L=N
     }
 
 
-def plot_k_selection(metrics, path):
-    """silhouette 與 NPMI 尺度不同，上下兩格共用 k 軸（不用雙 y 軸）。"""
+def plot_k_selection(metrics, path, highlight_k=None):
+    """silhouette 與 NPMI 尺度不同，上下兩格共用 k 軸（不用雙 y 軸）。
+
+    highlight_k：報告用，以淡色帶標出選定的群數。
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -72,6 +75,8 @@ def plot_k_selection(metrics, path):
     for ax, (col, title) in zip(axes, rows):
         x, y = metrics["k"], metrics[col]
         ax.set_facecolor("#fcfcfb")
+        if highlight_k is not None:
+            ax.axvspan(highlight_k - 0.4, highlight_k + 0.4, color="#cde2fb", zorder=0)
         ax.plot(x, y, color=color, linewidth=2, marker="o", markersize=6,
                 markeredgecolor="#fcfcfb", markeredgewidth=1.5)
         best = int(np.nanargmax(y.values))
@@ -90,10 +95,69 @@ def plot_k_selection(metrics, path):
         ax.set_ylim(lo - pad, hi + pad)
     axes[-1].set_xlabel("群數 k" if zh else "Number of clusters k", color=muted, fontsize=10)
     axes[-1].set_xticks(metrics["k"])
+    if highlight_k is not None:
+        axes[0].annotate("選定" if zh else "chosen", (highlight_k, 1.0), xycoords=("data", "axes fraction"),
+                         xytext=(0, 2), textcoords="offset points", ha="center", va="bottom",
+                         fontsize=9, color=muted)
     fig.tight_layout()
     fig.savefig(path, dpi=150, facecolor=fig.get_facecolor())
     plt.close(fig)
     return zh
+
+
+SAME_TOPIC = 3   # 前 5 個關鍵詞至少有幾個相同，視為同一主題
+
+
+def _kw(r, c, n=3):
+    return ", ".join(r["keywords"][c][:n])
+
+
+def _same_topic(prev, a, cur, b):
+    return len(set(prev["keywords"][a][:5]) & set(cur["keywords"][b][:5])) >= SAME_TOPIC
+
+
+def describe_transition(prev, cur):
+    """比較 k 與 k+1 的分群，回傳「哪一群被拆開、哪一群消失、哪一群主題改變」的文字清單。
+
+    每個新群歸給文件重疊最多的舊群：
+    - 舊群對應兩個以上新群 → 拆開；
+    - 舊群沒有對應的新群 → 消失（文件併入其他群）；
+    - 舊群對應一個新群但前 5 個關鍵詞相同不到 3 個 → 主題改變；
+    - 其餘視為主題不變（文件數可能略有增減）。
+    階層式分群的結果巢狀，每次只會有一群被拆開。
+    """
+    a, b = np.asarray(prev["labels"]), np.asarray(cur["labels"])
+    ct = pd.crosstab(b, a)                      # 列：新群，欄：舊群
+    parent = ct.idxmax(axis=1)
+    lines, unchanged = [], 0
+    for old in ct.columns:
+        kids = [j for j in ct.index if parent[j] == old]
+        if len(kids) >= 2:
+            parts = "、".join(f"[{_kw(cur, j)}]（{int(cur['sizes'][j])} 篇）" for j in kids)
+            lines.append(f"拆開：[{_kw(prev, old)}]（{int(prev['sizes'][old])} 篇）→ {parts}")
+        elif not kids:
+            lines.append(f"消失：[{_kw(prev, old)}]（{int(prev['sizes'][old])} 篇），文件併入其他群")
+        elif not _same_topic(prev, old, cur, kids[0]):
+            j = kids[0]
+            lines.append(f"主題改變：[{_kw(prev, old)}]（{int(prev['sizes'][old])} 篇）→ "
+                         f"[{_kw(cur, j)}]（{int(cur['sizes'][j])} 篇）")
+        else:
+            unchanged += 1
+    if unchanged:
+        lines.append(f"其餘 {unchanged} 群主題不變")
+    return lines
+
+
+def plot_overview_dendrogram(L, labels_top, keywords_top, sizes_top, ks, path, highlight_k=None):
+    """切成候選上限群數時的樹狀圖，並以虛線標出各候選 k 的切割位置（步驟 2 與報告共用）。"""
+    k_top = len(sizes_top)
+    Z = cluster_linkage(L, np.asarray(labels_top), k_top)
+    font = cjk_font()
+    leaf = [f"{', '.join(kw[:2])}（{s}）" if font else f"{c} ({s})"
+            for c, (kw, s) in enumerate(zip(keywords_top, sizes_top))]
+    title = (f"{k_top} 群的合併關係與各候選 k 的切割位置" if font
+             else f"Merge tree of {k_top} clusters, candidate cuts")
+    plot_dendrogram(Z, leaf, path, title, font, cuts=cut_positions(L, ks), highlight_k=highlight_k)
 
 
 def print_checkpoint(n, k_range, metrics, results, png, zh_font, algorithm, sampled):
@@ -109,6 +173,19 @@ def print_checkpoint(n, k_range, metrics, results, png, zh_font, algorithm, samp
     print()
     print(f"指標圖：{png}" + ("" if zh_font else "（找不到中文字型，圖中文字改用英文）"))
 
+    if len(results) > 1:
+        print()
+        print("群數增加時的變化（每群以前 3 個關鍵詞表示）：")
+        first = results[0]
+        print(f"  k = {first['k']}：" + "｜".join(f"[{_kw(first, c)}]（{int(s)} 篇）"
+                                                for c, s in enumerate(first["sizes"])))
+        for prev, cur in zip(results, results[1:]):
+            print(f"  k = {prev['k']} → {cur['k']}：")
+            for line in describe_transition(prev, cur):
+                print(f"    {line}")
+
+    print()
+    print("各 k 的完整關鍵詞：")
     for r in results:
         print()
         print(f"--- k = {r['k']}（silhouette {r['silhouette']:.3f}，NPMI {r['npmi']:.3f}）")
@@ -202,20 +279,16 @@ def main(argv=None):
     if L is not None:
         np.save(wd / "linkage.npy", L)
         top = results[-1]
-        Z = cluster_linkage(L, top["labels"], top["k"])
         dendro = wd / "dendrogram.png"
-        font = cjk_font()
-        leaf = [f"{', '.join(kw[:2])}（{s}）" if font else f"{c} ({s})"
-                for c, (kw, s) in enumerate(zip(top["keywords"], top["sizes"]))]
-        plot_dendrogram(Z, leaf, dendro,
-                        f"切成 {top['k']} 群時各群的合併關係（前 2 個關鍵詞（文件數））" if font
-                        else f"Merge tree of the {top['k']} clusters", font)
+        plot_overview_dendrogram(L, top["labels"], top["keywords"], top["sizes"],
+                                 range(k_min, k_max + 1), dendro)
     elif (wd / "linkage.npy").exists():
         (wd / "linkage.npy").unlink()
 
     print_checkpoint(n, (k_min, k_max), metrics, results, png, zh_font, algorithm, D is None)
     if dendro is not None:
-        print(f"樹狀圖（切成 k = {k_max} 群時，各群的上下層關係；較小的 k 即由這棵樹往上合併而成）：{dendro}")
+        print(f"樹狀圖（切成 k = {k_max} 群時，各群的上下層關係；虛線標出各候選 k 的切割位置，"
+              f"切割線右側的分叉數即為該 k 的群數）：{dendro}")
     print()
     print(f"中間結果已存於 {wd}")
 

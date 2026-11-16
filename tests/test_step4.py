@@ -55,9 +55,12 @@ def test_with_labels(tmp_path, capsys):
     m = pd.read_csv(tmp_path / "metrics.csv", encoding="utf-8-sig")
     assert {"silhouette", "NPMI", "ARI", "NMI", "純度"} <= set(m["指標"])
     assert (m["範圍"] == "整體").sum() == 5
-    report = (tmp_path / "report.md").read_text(encoding="utf-8")
-    assert "ARI" in report and "交叉表" in report and "隨機種子：42" in report
+    report = (tmp_path / "report.html").read_text(encoding="utf-8")
+    assert "ARI" in report and "交叉表" in report and "<dt>隨機種子</dt><dd>42" in report
     assert "名稱來源" in report
+    assert "data:image/png;base64," in report                  # 圖片內嵌
+    assert "http://" not in report and "https://" not in report   # 不依賴網路
+    assert not (tmp_path / "report.md").exists()
 
 
 def test_without_labels(tmp_path):
@@ -67,7 +70,7 @@ def test_without_labels(tmp_path):
     _pipeline(out, ["--input", str(f), "--text-col", "內容"])
     m = pd.read_csv(out / "metrics.csv", encoding="utf-8-sig")
     assert not {"ARI", "NMI", "純度"} & set(m["指標"])
-    assert "略過事後比對" in (out / "report.md").read_text(encoding="utf-8")
+    assert "略過事後比對" in (out / "report.html").read_text(encoding="utf-8")
 
 
 def test_requires_names(tmp_path):

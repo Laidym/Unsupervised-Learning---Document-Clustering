@@ -4,12 +4,21 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.cluster.hierarchy import cut_tree, is_valid_linkage
+from scipy.cluster.hierarchy import cut_tree, fcluster, is_valid_linkage
 from sklearn.preprocessing import normalize
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from clustering import run_clustering  # noqa: E402
-from hierarchical import build_linkage, cluster_linkage, cut, merge_steps  # noqa: E402
+from hierarchical import build_linkage, cluster_linkage, cut, cut_positions, merge_steps  # noqa: E402
+
+
+def test_cut_positions_give_k_clusters():
+    L = build_linkage(_data(seed=4))
+    pos = cut_positions(L, range(2, 10))
+    assert list(pos) == list(range(2, 10))
+    assert all(pos[k] > pos[k + 1] for k in range(2, 9))            # 群數越多，切得越低
+    for k, x in pos.items():                                         # 在該高度切割剛好得到 k 群
+        assert len(np.unique(fcluster(L, x, criterion="distance"))) == k
 from step1_vectorize import main as step1_main  # noqa: E402
 from step2_cluster import main as step2_main  # noqa: E402
 from step3_keywords import main as step3_main  # noqa: E402
@@ -68,14 +77,16 @@ def test_pipeline_with_hierarchical(tmp_path, capsys):
     assert (tmp_path / "work" / "step3" / "dendrogram.png").exists()
     step3_main(["--k", "4", "--names", "甲", "乙", "丙", "丁", "--out", str(tmp_path)])
     step4_main(["--out", str(tmp_path)])
-    report = (tmp_path / "report.md").read_text(encoding="utf-8")
+    report = (tmp_path / "report.html").read_text(encoding="utf-8")
     assert "階層式分群（Ward 連結）" in report and "上下層關係" in report
+    assert (tmp_path / "work" / "step4" / "dendrogram_overview.png").exists()
+    assert "各候選群數的切割位置" in report and report.count("data:image/png;base64,") == 3
 
     # 改用其他演算法重跑步驟 2：舊的樹要刪除，報告不再有上下層關係
     step2_main(["--algorithm", "spherical", "--k-min", "4", "--k-max", "4", "--out", str(tmp_path)])
     assert not (wd2 / "linkage.npy").exists()
     step3_main(["--k", "4", "--names", "甲", "乙", "丙", "丁", "--out", str(tmp_path)])
     step4_main(["--out", str(tmp_path)])
-    assert "上下層關係" not in (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "上下層關係" not in (tmp_path / "report.html").read_text(encoding="utf-8")
     cfg = json.loads((wd2 / "config.json").read_text(encoding="utf-8"))
     assert cfg["algorithm"] == "spherical"
