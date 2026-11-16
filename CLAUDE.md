@@ -2,7 +2,7 @@
 
 本 repo 開發一個 Claude skill：對一批沒有標籤的英文或中文文件做非監督分群，萃取各群關鍵詞供使用者命名，並評估結果。這是課堂專案，需與另一組的「多變量分析」skill 及組員的通用分群 skill 做出區隔，重點在**文字資料特有的處理與可解釋性**。
 
-使用說明的唯一原始檔是 `README.qmd`（Quarto）。本檔記錄實作所需的規格與已做的設計決定；兩者衝突時，先與使用者確認。
+使用說明的唯一原始檔是 `README.md`（GitHub 首頁顯示）。本檔記錄實作所需的規格與已做的設計決定；兩者衝突時，先與使用者確認。
 
 ## 設計原則
 
@@ -82,8 +82,8 @@ skill 最終在 claude.ai 的沙盒執行，**通常沒有網路**，不能 pip 
 ```
 SKILL.md            給 Claude 的執行指令（含檢查點互動方式）
 text-clustering.zip 安裝用的 skill 套件（tools/build_skill.py 產生）
-README.qmd          使用說明原始檔；references.bib、references.csl 為其文獻與樣式
-README.md           由 README.qmd 產生（gfm），GitHub 首頁顯示用，勿直接編輯
+README.md           使用說明原始檔，GitHub 首頁顯示
+README.html         由 README.md 產生（tools/build_readme_html.py），勿直接編輯
 CLAUDE.md           本檔
 scripts/            分析程式（各步驟可獨立執行，中間結果存檔以支援回到前一步重做）
 vendor/jieba/       內附中文斷詞
@@ -112,8 +112,9 @@ tests/              測試
 
 ## 文件維護
 
-- 修改流程或預設值時，`README.qmd` 與 `SKILL.md` 必須同步更新。
-- `README.qmd` 的參考文獻用 `[@key]` 引用 `references.bib`；新增或刪除方法時同步增刪文獻，不保留未引用的條目。
-- 表格第一欄有連續相同內容時要合併儲存格：`README.qmd` 用 grid table 的跨列儲存格（Pandoc 3 以上支援）；`SKILL.md` 及與使用者互動時的表格無法合併，重複的內容留空，只寫在該組第一列。
-- 產生使用說明：`quarto render README.qmd`，同時輸出 README.html（不納入版本控制）與 README.md（GitHub 格式，納入版本控制，作為 repo 首頁）。修改 README.qmd 後必須重新產生並一起 commit。
+- 修改流程或預設值時，`README.md` 與 `SKILL.md` 必須同步更新。
+- `README.md` 的寫法以 GitHub 顯示為準：行內數學式用 $`…`$、獨立數學式用 ```` ```math ```` 區塊（式中的 `<` 寫成 `\lt`，否則 GitHub 會當成 HTML 標籤）；提示框用 `> [!NOTE]` 等 GitHub 語法；流程圖用 ```` ```mermaid ````。
+- 參考文獻在 `README.md` 文末手動維護（作者–年份格式，文中以「(作者 年份)」引用）；新增或刪除方法時同步增刪文獻，不保留未引用的條目。
+- 表格第一欄有連續相同內容時要合併儲存格：`README.md` 用 HTML 表格的 `rowspan`；`SKILL.md` 及與使用者互動時的表格無法合併，重複的內容留空，只寫在該組第一列。
+- 產生 HTML 版：`python tools/build_readme_html.py`（需 Quarto），由 README.md 輸出 README.html（同目錄，資源內嵌）。修改 README.md 後必須重新產生並一起 commit。
 - 安裝用的 `text-clustering.zip` 放在 repo 根目錄並納入版本控制，由 `python tools/build_skill.py` 產生（只含 SKILL.md、scripts/、vendor/、data/，換行一律 LF）。修改這些內容後，commit 前必須重新打包，讓 zip 與原始碼一致。
