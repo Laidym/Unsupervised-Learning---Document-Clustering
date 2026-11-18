@@ -78,8 +78,8 @@ def test_shared_keyword_hint():
 
 
 def test_mixed_language_hints():
-    assert any("含有 12% 的中文字元" in s for s in _limits(language="en", zh_ratio=0.12))
-    assert any("英文字母約占 40%" in s for s in _limits(language="zh", zh_ratio=0.6))
+    assert any("中英混雜：中文字元占中文字元與英文詞合計的 12%" in s for s in _limits(language="en", zh_ratio=0.12))
+    assert any("中英混雜：中文字元占中文字元與英文詞合計的 60%" in s for s in _limits(language="zh", zh_ratio=0.6))
     assert _limits(language="en", zh_ratio=0.01) == [] and _limits(language="zh", zh_ratio=0.95) == []
 
 
