@@ -5534,11 +5534,8 @@ flowchart TD
 
   subgraph S1[&quot;步驟 1　前處理與向量化&quot;]
     direction TB
-    C{&quot;語言判斷&quot;}
-    C --&gt;|中文| D1[&quot;jieba 斷詞&lt;br/&gt;中文停用詞&quot;]
-    C --&gt;|英文| D2[&quot;移除 email 與網址&lt;br/&gt;依空白、標點與數字切分&lt;br/&gt;英文停用詞&quot;]
-    D1 --&gt; E[&quot;TF-IDF → SVD 降維 → 長度正規化&quot;]
-    D2 --&gt; E
+    D[&quot;清理：移除 email 與網址&lt;br/&gt;斷詞：中文字段用 jieba，其他依空白、標點與數字切分&lt;br/&gt;去除中英文停用詞&quot;]
+    D --&gt; E[&quot;TF-IDF → SVD 降維 → 長度正規化&quot;]
     E --&gt; CP1[&quot;檢查點 1：確認詞彙摘要&lt;br/&gt;可調整詞彙篩選、詞組範圍&quot;]:::user
   end
 
@@ -5586,47 +5583,39 @@ flowchart TD
 <p><strong>固定設定</strong>：</p>
 <table class="caption-top table">
 <colgroup>
-<col style="width: 33%">
-<col style="width: 33%">
-<col style="width: 33%">
+<col style="width: 50%">
+<col style="width: 50%">
 </colgroup>
 <thead>
 <tr class="header">
 <th>項目</th>
-<th>中文</th>
-<th>英文</th>
+<th>設定（中英文相同）</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td>語言判斷</td>
-<td>依中文字元比例自動判斷</td>
-<td>同左</td>
-</tr>
-<tr class="even">
 <td>清理</td>
-<td>移除 email、網址、主機名稱與 Usenet 群組名稱，英文字母轉小寫</td>
-<td>移除 email、網址、主機名稱（如 <code>ftp.cs.cmu.edu</code>）與 Usenet 群組名稱（如 <code>news.answers</code>），轉為小寫</td>
-</tr>
-<tr class="odd">
-<td>斷詞</td>
-<td>jieba 精確模式 (Sun, n.d.)，使用對繁體較佳的大詞典；只保留兩字以上的中文詞與兩個字母以上的英文詞</td>
-<td>依空白、標點與數字切分，只保留兩個字母以上的詞</td>
+<td>移除 email、網址、主機名稱（如 <code>ftp.cs.cmu.edu</code>）與 Usenet 群組名稱（如 <code>news.answers</code>），英文字母轉小寫</td>
 </tr>
 <tr class="even">
-<td>停用詞</td>
-<td>內建中文停用詞清單（本專案整理，繁簡並列）</td>
-<td>內建英文停用詞清單 (<span class="nocase">Pedregosa et al.</span> 2011)，另含縮寫切開後的殘片（如 don’t 的 <code>don</code>）</td>
+<td>斷詞</td>
+<td>連續的中文字段以 jieba 精確模式 (Sun, n.d.) 斷詞，使用對繁體較佳的大詞典，只保留兩字以上的詞；其他文字依空白、標點與數字切分，只保留兩個字母以上的詞（含 é、ü 等帶重音的字母）</td>
 </tr>
 <tr class="odd">
+<td>停用詞</td>
+<td>內建中文停用詞清單（本專案整理，繁簡並列），以及內建英文停用詞清單 (<span class="nocase">Pedregosa et al.</span> 2011)，另含縮寫切開後的殘片（如 don’t 的 <code>don</code>）與文獻引用、圖表標記的殘片（如 <code>et</code>、<code>al</code>、<code>fig</code>、<code>pp</code>、<code>vol</code>、<code>doi</code>）</td>
+</tr>
+<tr class="even">
 <td>加權</td>
 <td>TF-IDF (Salton and Buckley 1988)</td>
-<td>同左</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>降維與正規化</td>
 <td>Truncated SVD 降至 100 維 (Deerwester et al. 1990)，再將向量長度正規化為 1</td>
-<td>同左</td>
+</tr>
+<tr class="even">
+<td>主要語言</td>
+<td>中文字元占「中文字元＋英文詞」的比例超過 30% 視為中文，否則為英文；只用於決定原始長度以「字」或「詞」計、提示中英混雜，不影響斷詞</td>
 </tr>
 </tbody>
 </table>
@@ -5718,7 +5707,7 @@ min_df = 2、max_df = 0.95 <strong>（文件數 &lt; 1,000 時建議）</strong>
 </tr>
 </tbody>
 </table>
-<p>中文捨棄單字詞，是因為單字多為虛詞或量詞（如「的」「很」「個」），保留下來雜訊大於資訊。英文的清理與切詞規則是為了排除不帶主題意義的片段：email 與主機名稱切開後會留下 <code>edu</code>、<code>com</code> 等詞，Usenet 群組名稱（20 Newsgroups 文中常見）切開後會留下 <code>news</code>、<code>answers</code> 等詞，且等於洩漏類別名稱；年份與版本號等數字也很少有助於區分主題。</p>
+<p>中英文使用同一套斷詞流程：jieba 只處理中文字段，其餘文字的切分規則與純英文資料相同，因此純英文資料的結果不受影響，而夾雜英文術語或文獻引用的中文資料，中文部分也一定會被斷詞，不會因語言判斷而走錯流程。中文捨棄單字詞，是因為單字多為虛詞或量詞（如「的」「很」「個」），保留下來雜訊大於資訊。英文的清理與切詞規則是為了排除不帶主題意義的片段：email 與主機名稱切開後會留下 <code>edu</code>、<code>com</code> 等詞，Usenet 群組名稱（20 Newsgroups 文中常見）切開後會留下 <code>news</code>、<code>answers</code> 等詞，且等於洩漏類別名稱；年份與版本號等數字也很少有助於區分主題。</p>
 <p>min_df 為整數時代表最少出現篇數，max_df 為小數時代表最多出現比例；兩者皆以「出現在幾篇文件中」計算，而非出現次數。SVD 降至 100 維為經驗值，與 scikit-learn 官方文件分群範例相同 (<span class="nocase">scikit-learn developers</span>, n.d.)；LSA 文獻中常用數百維 (Landauer and Dumais 1997)。SVD 能取的成分數不超過矩陣的列數與行數，因此實際維度為 <span class="math inline">\(\min(100,\ n-1,\ m-1)\)</span>，<span class="math inline">\(n\)</span> 為文件數、<span class="math inline">\(m\)</span> 為篩選後的詞彙量；文件數或詞彙量不足時自動調低。</p>
 <div class="callout callout-style-default callout-note callout-titled">
 <div class="callout-header d-flex align-content-center">
@@ -6066,7 +6055,7 @@ H(V) = -\sum_j \frac{b_j}{n} \ln \frac{b_j}{n},
 <li><strong>讀者留言</strong>：常離題，使關鍵詞混雜。</li>
 <li><strong>轉載造成的近似重複</strong>：skill 只刪除完全相同的文件，內容幾乎相同的轉載會保留，並使所屬群的關鍵詞偏向該篇。</li>
 <li><strong>長度極端的文件</strong>：只有標題或一兩句的短訊分群依據太少；極長的文件（如 FAQ）可能主導所屬群的關鍵詞。報告會提示這兩種情況。</li>
-<li><strong>語言</strong>：一次分析一種語言；中英混雜時可能依語言分群。</li>
+<li><strong>語言</strong>：中英文可以混在一起分析，但同一概念的中英文用詞（如「迴歸」與 regression）是不同的詞，中文文件與英文文件可能依語言分群。</li>
 </ul>
 <p>若文章原有分類（如新聞版別），可另放一欄作為標籤，只用於最後的事後比對。</p>
 </div>
@@ -6082,7 +6071,7 @@ H(V) = -\sum_j \frac{b_j}{n} \ln \frac{b_j}{n},
 <section id="互動流程" class="level2">
 <h2 class="anchored" data-anchor-id="互動流程">4.4　互動流程</h2>
 <ol type="1">
-<li>skill 讀取資料，請使用者指定文字欄位與標籤欄位（無標籤可略過），並回報文件數與判斷的語言。</li>
+<li>skill 讀取資料，請使用者指定文字欄位與標籤欄位（無標籤可略過），並回報文件數與主要語言。</li>
 <li>在檢查點 1、分群演算法確認、檢查點 2 與命名階段，skill 呈現中間結果並等待回覆。可回覆具體設定（例如「群數選 6」），或回覆「使用建議設定」；命名時可回覆「全部採用建議」或「群 2 改成〇〇，其他採用建議」。</li>
 <li>使用者可隨時要求回到前面的步驟重做，例如「把 min_df 改成 2 後重新分群」。</li>
 <li>完成後輸出報告與結果檔。</li>

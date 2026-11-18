@@ -19,9 +19,9 @@ def test_default_min_df():
 
 def test_summary_lists_bigrams_only_when_present():
     docs = pd.DataFrame({"text": TEXTS})
-    uni = vectorize(TEXTS, "en", min_df=1, max_df=1.0)
+    uni = vectorize(TEXTS, min_df=1, max_df=1.0)
     assert "最高頻雙詞" not in summarize(docs, uni["counts"], uni["vocab"])
-    bi = vectorize(TEXTS, "en", min_df=1, max_df=1.0, ngram_max=2)
+    bi = vectorize(TEXTS, min_df=1, max_df=1.0, ngram_max=2)
     s = summarize(docs, bi["counts"], bi["vocab"])
     assert s["雙詞數"] > 0 and all(" " in r["詞"] for r in s["最高頻雙詞"])
 
@@ -63,7 +63,7 @@ def test_svd_dim():
 
 
 def test_vectorize_tokens_and_norm():
-    info = vectorize(TEXTS, "en", min_df=1, max_df=1.0)
+    info = vectorize(TEXTS, min_df=1, max_df=1.0)
     vocab = set(info["vocab"])
     assert {"rocket", "baseball", "bible"} <= vocab
     assert not vocab & {"the", "don", "1993", "a"}          # 停用詞、縮寫殘片、數字、單字母
@@ -73,13 +73,13 @@ def test_vectorize_tokens_and_norm():
 
 
 def test_vectorize_bigrams():
-    info = vectorize(TEXTS, "en", min_df=1, max_df=1.0, ngram_max=2)
+    info = vectorize(TEXTS, min_df=1, max_df=1.0, ngram_max=2)
     assert "rocket launch" in info["vocab"]
 
 
 def test_docs_without_terms_are_dropped():
     texts = TEXTS + ["the and of 123"]
-    info = vectorize(texts, "en", min_df=1, max_df=1.0)
+    info = vectorize(texts, min_df=1, max_df=1.0)
     assert list(info["keep"]) == list(range(len(TEXTS)))
 
 

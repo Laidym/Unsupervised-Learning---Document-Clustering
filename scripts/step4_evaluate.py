@@ -40,8 +40,8 @@ UNEVEN_RATIO = 5               # 最大群／最小群超過此倍數
 NPMI_GAP = 0.1                 # 群的 NPMI 低於各群平均超過此值
 DOMINANT_SHARE = 0.3           # 群內單一文件占該群關鍵詞出現次數的比例超過此值
 SHARED_KEYWORDS = 5            # 兩群前 10 個關鍵詞相同達此數
-MIXED_ZH_IN_EN = 0.05          # 判為英文、但中文字元比例超過此值
-MIXED_EN_IN_ZH = 0.7           # 判為中文、但中文字元比例低於此值
+MIXED_ZH_IN_EN = 0.05          # 中文比例介於兩值之間視為中英混雜
+MIXED_EN_IN_ZH = 0.7
 REMOVED_SHARE = 0.1            # 空白列與重複文件占原始列數超過此比例
 
 
@@ -93,12 +93,9 @@ def data_limits(*, n, k, sizes, npmi_per, silhouette, eff_median, n_dropped, k_r
         if removed / load_stats["原始列數"] > REMOVED_SHARE:
             notes.append(f"讀入的 {load_stats['原始列數']} 列中有 {removed} 列為空白或重複而被刪除"
                          f"（{removed / load_stats['原始列數']:.0%}），請確認資料是否符合預期。")
-    if language == "en" and zh_ratio is not None and zh_ratio > MIXED_ZH_IN_EN:
-        notes.append(f"資料判為英文，但含有 {zh_ratio:.0%} 的中文字元；英文流程不會斷開中文，"
-                     "中文內容的分析品質較差。")
-    if language == "zh" and zh_ratio is not None and zh_ratio < MIXED_EN_IN_ZH:
-        notes.append(f"資料判為中文，但英文字母約占 {1 - zh_ratio:.0%}；英文詞會保留為獨立的詞，"
-                     "中英混雜的文件可能因語言不同而被分開。")
+    if zh_ratio is not None and MIXED_ZH_IN_EN < zh_ratio < MIXED_EN_IN_ZH:
+        notes.append(f"資料中英混雜：中文字元占中文字元與英文詞合計的 {zh_ratio:.0%}。中英文詞分屬不同詞彙"
+                     "（如「迴歸」與 regression），同一主題的中文與英文文件可能因語言不同而被分開。")
     if eff_median < SHORT_DOC_MEDIAN:
         notes.append(f"文件偏短：去除停用詞後的有效詞數中位數只有 {eff_median:g} 個，"
                      "詞袋向量稀疏，分群與關鍵詞較不穩定。")
@@ -165,7 +162,7 @@ def settings_list(ctx):
         ("資料", f"{s1['input']}（文字欄「{s1['text_col']}」{label}）"),
         ("讀入與清理", f"讀入 {ls['原始列數']} 列，刪除空白列 {ls['刪除空白列']}、重複文件 {ls['刪除重複文件']}、"
                     f"無有效詞文件 {len(s1['dropped_no_terms'])}；分析 {ctx['n']} 篇"),
-        ("語言", "英文" if s1["language"] == "en" else "中文"),
+        ("主要語言", "英文" if s1["language"] == "en" else "中文"),
         ("前處理", s1["preprocess"]),
         ("斷詞", s1.get("tokenizer", "—")),
         ("停用詞", s1["stop_words"]),

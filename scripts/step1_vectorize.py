@@ -32,7 +32,7 @@ from sklearn.preprocessing import normalize
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import DATA_20NG, DEFAULT_OUT, SEED, is_txt_collection, load_docs, load_json, save_json, setup_stdout, work_dir  # noqa: E402
-from tokenize_zh import ZhAnalyzer  # noqa: E402
+from tokenize_zh import WORD_PATTERN, TextAnalyzer  # noqa: E402
 
 SVD_DIM = 100
 ZH_THRESHOLD = 0.3
@@ -43,10 +43,14 @@ _CONTRACTION_PARTS = {
     "isn", "ll", "mustn", "needn", "re", "shouldn", "ve", "wasn", "weren",
     "won", "wouldn",
 }
-EN_STOP_WORDS = frozenset(ENGLISH_STOP_WORDS | _CONTRACTION_PARTS)
+# 學術文獻的引用與圖表標記殘片（et al.、Fig. 3、pp. 12、Vol. 5、doi:…），幾乎每篇論文都有，不帶主題意義
+_CITATION_PARTS = {
+    "et", "al", "fig", "figs", "pp", "vol", "vols", "eq", "eqs", "ibid", "cf", "doi",
+}
+EN_STOP_WORDS = frozenset(ENGLISH_STOP_WORDS | _CONTRACTION_PARTS | _CITATION_PARTS)
 
-# 由兩個以上字母組成的詞；數字與標點都是分隔符
-EN_TOKEN_PATTERN = r"(?u)\b[^\W\d_]{2,}\b"
+# 由兩個以上字母組成的詞；數字與標點都是分隔符（中文以外的文字使用此規則）
+EN_TOKEN_PATTERN = WORD_PATTERN
 
 # email、網址與主機名稱在切詞後會留下 edu、com、mit 等殘片，切詞前先移除。
 # 主機名稱只認通用頂級網域（可再接兩字母國碼），避免誤刪 image.gif 這類檔名。
@@ -69,49 +73,39 @@ def clean_en(text):
     return _EN_NOISE.sub(" ", text).lower()
 
 _CJK = re.compile("[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
-_LATIN = re.compile(r"[A-Za-z]")
+_LATIN_WORD = re.compile(r"[A-Za-z]+")
 
 
 def detect_language(texts):
-    """中文字元占（中文字元＋英文字母）的比例超過門檻即判為中文。"""
+    """主要語言：中文字元占（中文字元＋英文詞）的比例超過門檻即為中文。
+
+    英文以「詞」而非字母計數，否則一個英文詞的數個字母會放大英文的比重。
+    斷詞不依語言分流（見 tokenize_zh.TextAnalyzer）；主要語言只決定原始長度的單位與中英混雜提示。
+    """
     joined = "".join(texts)
     n_cjk = len(_CJK.findall(joined))
-    n_latin = len(_LATIN.findall(joined))
+    n_latin = len(_LATIN_WORD.findall(joined))
     total = n_cjk + n_latin
     ratio = n_cjk / total if total else 0.0
     return ("zh" if ratio > ZH_THRESHOLD else "en"), ratio
 
 
-def fixed_settings(lang):
-    """記錄於 config.json 與報告的固定前處理設定。"""
-    if lang == "zh":
-        return {
-            "preprocess": "移除 email、網址、主機名稱、Usenet 群組名稱；英文轉小寫",
-            "tokenizer": "jieba 0.42.1 精確模式（內附 dict.txt.big）；只保留兩字以上中文詞與兩個字母以上英文詞",
-            "stop_words": "內建中文停用詞（本專案整理）＋英文停用詞",
-        }
+def fixed_settings():
+    """記錄於 config.json 與報告的固定前處理設定（中英文共用同一套流程）。"""
     return {
-        "preprocess": "移除 email、網址、主機名稱、Usenet 群組名稱；轉小寫",
-        "tokenizer": "依空白、標點與數字切分，只保留兩個字母以上的詞",
+        "preprocess": "移除 email、網址、主機名稱、Usenet 群組名稱；英文轉小寫",
+        "tokenizer": "中文字段以 jieba 0.42.1 精確模式斷詞（內附 dict.txt.big），只保留兩字以上的詞；"
+                     "其他文字依空白、標點與數字切分，只保留兩個字母以上的詞",
         "token_pattern": EN_TOKEN_PATTERN,     # 只存檔供重現，不顯示在報告
-        "stop_words": "scikit-learn ENGLISH_STOP_WORDS＋英文縮寫殘片",
+        "stop_words": "內建中文停用詞（本專案整理）＋scikit-learn ENGLISH_STOP_WORDS＋英文縮寫與文獻引用殘片",
     }
 
 
-def make_vectorizer(lang, min_df, max_df, ngram_max):
-    if lang == "zh":
-        return CountVectorizer(
-            analyzer=ZhAnalyzer(ngram_max, clean_en, EN_STOP_WORDS),
-            min_df=min_df,
-            max_df=max_df,
-        )
+def make_vectorizer(min_df, max_df, ngram_max):
     return CountVectorizer(
-        preprocessor=clean_en,
-        token_pattern=EN_TOKEN_PATTERN,
-        stop_words=sorted(EN_STOP_WORDS),
+        analyzer=TextAnalyzer(ngram_max, clean_en, EN_STOP_WORDS),
         min_df=min_df,
         max_df=max_df,
-        ngram_range=(1, ngram_max),
     )
 
 
@@ -119,12 +113,12 @@ def svd_dim(n_docs, n_terms):
     return max(1, min(SVD_DIM, n_docs - 1, n_terms - 1))
 
 
-def vectorize(texts, lang, min_df=5, max_df=0.95, ngram_max=1, seed=SEED):
+def vectorize(texts, min_df=5, max_df=0.95, ngram_max=1, seed=SEED):
     """回傳 dict：counts（詞頻）、keep（保留的文件索引）、vocab、vectors、svd 資訊。
 
     篩選詞彙後完全沒有詞的文件無法計算 cosine 距離，予以排除並記錄於 keep。
     """
-    cv = make_vectorizer(lang, min_df, max_df, ngram_max)
+    cv = make_vectorizer(min_df, max_df, ngram_max)
     try:
         counts = cv.fit_transform(texts)
     except ValueError as e:
@@ -251,7 +245,8 @@ def print_checkpoint(load_stats, lang, ratio, settings, info, summary, n_dropped
           f"重複文件 {load_stats['刪除重複文件']}。")
     if n_dropped:
         print(f"另有 {n_dropped} 篇文件在詞彙篩選後沒有任何詞，已排除。")
-    print(f"語言判斷：{lang_name}（中文字元比例 {ratio:.1%}）")
+    print(f"主要語言：{lang_name}（中文字元占中文字元與英文詞合計的 {ratio:.1%}）；"
+          "中英文使用同一套斷詞流程，語言只影響原始長度的單位")
     print(f"目前設定：{settings_text(settings)}")
     if settings.get("min_df_auto"):
         print(f"（min_df 依文件數自動設定：文件數 < {SMALL_CORPUS:,} 篇用 {MIN_DF_SMALL}，"
@@ -346,7 +341,7 @@ def main(argv=None):
     settings = {"min_df": min_df, "max_df": max_df, "ngram_max": args.ngram, "min_df_auto": auto}
 
     lang, ratio = detect_language(docs["text"].tolist())
-    info = vectorize(docs["text"].tolist(), lang, min_df, max_df, args.ngram)
+    info = vectorize(docs["text"].tolist(), min_df, max_df, args.ngram)
 
     dropped = docs.drop(index=info["keep"])
     docs = docs.iloc[info["keep"]].reset_index(drop=True)
@@ -372,7 +367,7 @@ def main(argv=None):
         "language": lang,
         "zh_ratio": round(ratio, 4),
         **settings,
-        **fixed_settings(lang),
+        **fixed_settings(),
         "tfidf": "scikit-learn TfidfTransformer 預設（smooth_idf、l2）",
         "svd_dim": info["svd_dim"],
         "svd_explained_variance": round(info["svd_explained_variance"], 4),
