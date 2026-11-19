@@ -4,10 +4,11 @@
 事後比對（自動）：步驟 1 有指定標籤欄才計算 ARI、NMI、純度；否則略過。標籤只在本步驟讀取。
 限制：固定說明四項，並依本次資料提示。
 文字雲：所有群畫在同一張圖上（scripts/wordcloud.py）；只放在 HTML 報告。
-重現套件：在結果資料夾寫出 reproduce/（reproduce.qmd＋程式碼，scripts/reproduce.py），供使用者在自己的電腦重跑。
+報告：先寫出原始檔 report.qmd（scripts/report_qmd.py），再 render 成 report.html（scripts/qmd_render.py）；
+report.qmd 從頭重跑步驟 1–4，並以 evaluate() 的結果產生各段落。
 
-輸出：<out>/<演算法>_k<k>/report.html（單一檔案，圖片內嵌，記錄所有設定與 seed），與步驟 3 的結果檔放在一起；
-文字版報告印在標準輸出。
+輸出：<out>/<演算法>_k<k>/report.html（單一檔案，圖片內嵌，記錄所有設定與 seed）與 report_qmd.zip
+（report.qmd 與程式碼），與步驟 3 的結果檔放在一起；文字版報告印在標準輸出。
 
 用法：python scripts/step4_evaluate.py [--out output]
 """
@@ -24,8 +25,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import DEFAULT_OUT, load_json, record_command, result_dir, setup_stdout, work_dir  # noqa: E402
 from clustering import ALGORITHMS, silhouette  # noqa: E402
 from hierarchical import cluster_linkage, merge_steps  # noqa: E402
-from reproduce import write_package  # noqa: E402
-from report_html import render as render_html  # noqa: E402
 from step2_cluster import plot_k_selection, plot_overview_dendrogram  # noqa: E402
 from textmetrics import cluster_npmi, top_terms  # noqa: E402
 from wordcloud import TOP_WORDS, cluster_anchors  # noqa: E402
@@ -225,13 +224,9 @@ def build_report(ctx):
     return "\n".join(L) + "\n"
 
 
-def main(argv=None):
-    setup_stdout()
-    ap = argparse.ArgumentParser(description="步驟 4　評估與限制")
-    ap.add_argument("--out", default=str(DEFAULT_OUT))
-    args = ap.parse_args(argv)
-
-    out = Path(args.out)
+def evaluate(out):
+    """計算指標、限制與報告所需的一切，回傳 ctx（report_html 的段落函式使用）。report.qmd 也呼叫此函式。"""
+    out = Path(out)
     w1, w2, w3 = (out / "work" / s for s in ("step1", "step2", "step3"))
     if not (w3 / "names.json").exists():
         sys.exit("找不到群名稱，請先完成步驟 3 的命名。")
@@ -303,13 +298,12 @@ def main(argv=None):
     metrics = pd.DataFrame(rows, columns=["指標", "範圍", "數值"])
     metrics["數值"] = metrics["數值"].round(4)
     w4 = work_dir(out, "step4")
-    record_command(args.out, "step4", __file__, argv)
     metrics.to_csv(w4 / "metrics.csv", index=False, encoding="utf-8-sig")   # 中間結果；指標已在報告中
 
     ctx = {"cfg1": cfg1, "cfg2": cfg2, "n": n, "n_vocab": len(vocab), "k": k,
            "merge": merge, "silhouette": sil, "sil_sampled": sil_sampled, "npmi": npmi, "external": external, "n_classes": n_classes,
            "crosstab": crosstab, "cluster_table": cluster_table, "data_notes": notes}
-    report = build_report(ctx)
+    ctx["text_report"] = build_report(ctx)
 
     k_png = w4 / "k_selection.png"
     plot_k_selection(pd.read_csv(w2 / "metrics_by_k.csv"), k_png, highlight_k=k)
@@ -333,19 +327,31 @@ def main(argv=None):
                    "dendrogram": w3 / "dendrogram.png" if merge else "",
                    "dendrogram_overview": overview},
     })
-    rdir = result_dir(out, cfg2["algorithm"], k)
-    pkg = write_package(out, rdir, cfg1, load_json)
-    ctx["reproduce"] = {"data": pkg[1]} if pkg else None
-    rpath = rdir / "report.html"
-    rpath.write_text(render_html(ctx), encoding="utf-8")
+    return ctx
+
+
+def main(argv=None):
+    setup_stdout()
+    ap = argparse.ArgumentParser(description="步驟 4　評估與限制")
+    ap.add_argument("--out", default=str(DEFAULT_OUT))
+    args = ap.parse_args(argv)
+    out = Path(args.out)
+
+    ctx = evaluate(out)
+    record_command(args.out, "step4", __file__, argv)
     old_md = out / "report.md"
     if old_md.exists():            # 舊版輸出，避免與 HTML 報告不一致
         old_md.unlink()
+    print(ctx["text_report"])
 
-    print(report)
-    print(f"已寫出 {rpath}")
-    if pkg:
-        print(f"已寫出重現套件 {pkg[0]}（reproduce.qmd 與程式碼，供使用者在自己的電腦重跑）")
+    from report_qmd import build_report as build_html_report
+    print("以 report.qmd 產生報告（從頭重跑步驟 1–4）……", file=sys.stderr)
+    rdir = result_dir(out, ctx["cfg2"]["algorithm"], ctx["k"])
+    hpath, zpath, error = build_html_report(out, rdir, ctx, load_json)
+    if error:
+        print(f"注意：{error}")
+    print(f"已寫出 {hpath}（由 report.qmd render 產生）")
+    print(f"已寫出 {zpath}（解壓後為 report_qmd/：report.qmd 與程式碼，報告的原始檔）")
 
 
 if __name__ == "__main__":
