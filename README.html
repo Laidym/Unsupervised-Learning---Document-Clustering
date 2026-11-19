@@ -5561,7 +5561,7 @@ flowchart TD
   subgraph S4[&quot;步驟 4　評估與限制&quot;]
     direction TB
     I[&quot;內部指標：silhouette、NPMI&quot;] --&gt; J{&quot;是否指定標籤欄？&quot;}
-    J --&gt;|是| K[&quot;事後比對：ARI、NMI、純度&quot;]
+    J --&gt;|是| K[&quot;事後比對：ARI、純度&quot;]
     J --&gt;|否| L[&quot;略過事後比對&quot;]
   end
 
@@ -5901,7 +5901,7 @@ k-medoids <strong>（文件數 ≤ 5,000 時建議）</strong>
 </tr>
 </tbody>
 </table>
-<p><strong>事後比對</strong>（自動執行）：若步驟 1 指定了標籤欄位，skill 以 ARI（adjusted Rand index，調整蘭德指數）(Hubert and Arabie 1985)、NMI（normalized mutual information，正規化互資訊）(Strehl and Ghosh 2002) 與純度 (Manning, Raghavan, and Schütze 2008) 量化分群與既有分類的吻合程度；未指定則略過。既有分類只是一種分法，不吻合不代表分群錯誤。</p>
+<p><strong>事後比對</strong>（自動執行）：若步驟 1 指定了標籤欄位，skill 以 ARI（adjusted Rand index，調整蘭德指數）(Hubert and Arabie 1985) 與純度 (Manning, Raghavan, and Schütze 2008) 量化分群與既有分類的吻合程度；未指定則略過。既有分類只是一種分法，不吻合不代表分群錯誤。</p>
 <div class="callout callout-style-default callout-important callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -5977,17 +5977,7 @@ s(i) = \frac{b(i) - a(i)}{\max\{a(i),\, b(i)\}}, \qquad S = \frac{1}{n}\sum_{i=1
 E = \frac{\sum_i\binom{a_i}{2}\sum_j\binom{b_j}{2}}{\binom{n}{2}},
 \]</span></p>
 <p><span class="math inline">\(E\)</span> 為隨機分群（各群、各類別大小不變）時的期望值。<em>流程角色：步驟 4 事後比對。</em></p>
-<p><strong>NMI（正規化互資訊）</strong>　從資訊的角度比較兩種分法：得知一篇文件的群別後，能減少多少對其標籤的不確定性。0 表示兩者毫無關聯，1 表示完全對應 (Strehl and Ghosh 2002)。令 <span class="math inline">\(U\)</span> 為群別、<span class="math inline">\(V\)</span> 為標籤，沿用上式符號：</p>
-<p><span class="math display">\[
-I(U;V) = \sum_{ij} \frac{n_{ij}}{n} \ln \frac{n\, n_{ij}}{a_i\, b_j}, \qquad
-H(U) = -\sum_i \frac{a_i}{n} \ln \frac{a_i}{n}, \qquad
-H(V) = -\sum_j \frac{b_j}{n} \ln \frac{b_j}{n},
-\]</span></p>
-<p><span class="math display">\[
-\text{NMI} = \frac{I(U;V)}{\tfrac{1}{2}\left[H(U) + H(V)\right]}.
-\]</span></p>
-<p>本 skill 以算術平均正規化（scikit-learn 預設）；Strehl and Ghosh (2002) 原文使用幾何平均 <span class="math inline">\(\sqrt{H(U)H(V)}\)</span>，兩者數值相近。<em>流程角色：步驟 4 事後比對。</em></p>
-<p><strong>純度</strong>　每一群取其中最多數的標籤，將各群的多數文件數加總後除以總文件數。直觀易懂，但群數越多純度越高（每篇文件自成一群時為 1），因此須搭配 ARI 或 NMI 解讀 (Manning, Raghavan, and Schütze 2008)。</p>
+<p><strong>純度</strong>　每一群取其中最多數的標籤，將各群的多數文件數加總後除以總文件數。直觀易懂，但群數越多純度越高（每篇文件自成一群時為 1），因此須搭配 ARI 解讀 (Manning, Raghavan, and Schütze 2008)。</p>
 <p><span class="math display">\[
 \text{純度} = \frac{1}{n} \sum_{i=1}^{k} \max_j n_{ij}.
 \]</span></p>
@@ -6219,9 +6209,6 @@ Schubert, Erich, and Peter J. Rousseeuw. 2021. “Fast and Eager k-Medoids Clust
 </div>
 <div id="ref-steinbach2000" class="csl-entry" role="listitem">
 Steinbach, Michael, George Karypis, and Vipin Kumar. 2000. “A Comparison of Document Clustering Techniques”. In <em>KDD Workshop on Text Mining</em>.
-</div>
-<div id="ref-strehl2002" class="csl-entry" role="listitem">
-Strehl, Alexander, and Joydeep Ghosh. 2002. “Cluster Ensembles: A Knowledge Reuse Framework for Combining Multiple Partitions”. <em>Journal of Machine Learning Research</em> 3: 583～617.
 </div>
 <div id="ref-jieba" class="csl-entry" role="listitem">
 Sun, Junyi. n.d. “jieba: Chinese Text Segmentation”. GitHub repository. <a href="https://github.com/fxsjy/jieba" class="uri">https://github.com/fxsjy/jieba</a>.

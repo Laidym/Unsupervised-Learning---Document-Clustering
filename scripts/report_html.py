@@ -128,8 +128,7 @@ def summary(ctx):
     cards = [("文件數", f"{ctx['n']:,}"), ("群數", str(ctx["k"])),
              ("silhouette", _fmt(ctx["silhouette"])), ("關鍵詞一致性 NPMI", _fmt(ctx["npmi"]))]
     if ctx["external"]:
-        cards += [("ARI（事後比對）", _fmt(ctx["external"]["ARI"])),
-                  ("NMI（事後比對）", _fmt(ctx["external"]["NMI"]))]
+        cards += [("ARI（事後比對）", _fmt(ctx["external"]["ARI"]))]
     return '<div class="cards">' + "".join(
         f'<div class="card"><div class="v">{_e(v)}</div><div class="l">{_e(l)}</div></div>'
         for l, v in cards) + "</div>"
@@ -202,10 +201,9 @@ def external(ctx):
     e, k = ctx["external"], ctx["k"]
     P = ['<ul class="plain">'
          f'<li><strong>ARI {_fmt(e["ARI"])}</strong>：1 為完全一致，0 相當於隨機分群。</li>'
-         f'<li><strong>NMI {_fmt(e["NMI"])}</strong>：0 為毫無關聯，1 為完全對應。</li>'
-         f'<li><strong>純度 {_fmt(e["純度"])}</strong>：群數越多越高，須搭配 ARI、NMI 解讀。</li>'
+         f'<li><strong>純度 {_fmt(e["純度"])}</strong>：群數越多越高，須搭配 ARI 解讀。</li>'
          f'<li>群數 {k}，標籤類別數 {ctx["n_classes"]}'
-         + ("；群數與類別數不同時，ARI、NMI 本來就不會接近 1。" if k != ctx["n_classes"] else "。")
+         + ("；群數與類別數不同時，ARI 本來就不會接近 1。" if k != ctx["n_classes"] else "。")
          + "</li></ul>"]
     cross = ctx["crosstab"]
     cols = list(cross.columns)
