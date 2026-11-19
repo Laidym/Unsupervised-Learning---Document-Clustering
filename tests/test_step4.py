@@ -80,3 +80,14 @@ def test_requires_names(tmp_path):
     step3_main(["--k", "3", "--out", str(tmp_path)])
     with pytest.raises(SystemExit, match="命名"):
         step4_main(["--out", str(tmp_path)])
+
+
+
+def test_word_cloud_section_before_settings(tmp_path):
+    _pipeline(tmp_path, ["--dataset", "20ng"])
+    report = (tmp_path / "kmedoids_k4" / "report.html").read_text(encoding="utf-8")
+    i = report.index("<h2>文字雲")
+    assert report.index("詞彙摘要") < i < report.index("<h2>設定紀錄")
+    assert report.count('<svg class="wcloud"') == 1                # 所有群合成一張
+    assert report.count('<g class="lbl">') == 4                     # 每群一個名稱標籤
+    assert report.count('class="legend"') == 1
