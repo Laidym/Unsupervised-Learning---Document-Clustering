@@ -31,6 +31,7 @@
 ---
 config:
   flowchart:
+    wrappingWidth: 400
     subGraphTitleMargin:
       top: 8
       bottom: 8
@@ -40,7 +41,7 @@ flowchart TD
 
   subgraph S1["步驟 1　前處理與向量化"]
     direction TB
-    D["清理：移除 email 與網址<br/>斷詞：中文字段用 jieba，其他依空白、標點與數字切分<br/>去除中英文停用詞"]
+    D["清理：移除 email 與網址<br/>斷詞：中文字段用 jieba，<br/>其他文字依空白、標點與數字切分<br/>去除中英文停用詞"]
     D --> E["TF-IDF → SVD 降維 → 長度正規化"]
     E --> CP1["檢查點 1：確認詞彙摘要<br/>可調整詞彙篩選、詞組範圍"]:::user
   end
@@ -50,8 +51,10 @@ flowchart TD
     N{"文件數 ≤ 5,000？"}
     N -->|是| M1["建議 k-medoids"]
     N -->|否| M2["建議球面 k-means"]
+    N -.->|選用| M3["階層式分群（Ward）"]
     M1 --> U["確認分群演算法"]:::user
     M2 --> U
+    M3 -.-> U
     U --> F["對候選群數分群<br/>計算 silhouette 與 NPMI"]
     F --> CP2["檢查點 2：選定群數"]:::user
   end

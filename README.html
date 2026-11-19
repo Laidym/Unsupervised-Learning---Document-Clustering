@@ -5525,6 +5525,7 @@ window.Quarto = {
 <pre class="mermaid mermaid-js">---
 config:
   flowchart:
+    wrappingWidth: 400
     subGraphTitleMargin:
       top: 8
       bottom: 8
@@ -5534,7 +5535,7 @@ flowchart TD
 
   subgraph S1[&quot;步驟 1　前處理與向量化&quot;]
     direction TB
-    D[&quot;清理：移除 email 與網址&lt;br/&gt;斷詞：中文字段用 jieba，其他依空白、標點與數字切分&lt;br/&gt;去除中英文停用詞&quot;]
+    D[&quot;清理：移除 email 與網址&lt;br/&gt;斷詞：中文字段用 jieba，&lt;br/&gt;其他文字依空白、標點與數字切分&lt;br/&gt;去除中英文停用詞&quot;]
     D --&gt; E[&quot;TF-IDF → SVD 降維 → 長度正規化&quot;]
     E --&gt; CP1[&quot;檢查點 1：確認詞彙摘要&lt;br/&gt;可調整詞彙篩選、詞組範圍&quot;]:::user
   end
@@ -5544,8 +5545,10 @@ flowchart TD
     N{&quot;文件數 ≤ 5,000？&quot;}
     N --&gt;|是| M1[&quot;建議 k-medoids&quot;]
     N --&gt;|否| M2[&quot;建議球面 k-means&quot;]
+    N -.-&gt;|選用| M3[&quot;階層式分群（Ward）&quot;]
     M1 --&gt; U[&quot;確認分群演算法&quot;]:::user
     M2 --&gt; U
+    M3 -.-&gt; U
     U --&gt; F[&quot;對候選群數分群&lt;br/&gt;計算 silhouette 與 NPMI&quot;]
     F --&gt; CP2[&quot;檢查點 2：選定群數&quot;]:::user
   end
