@@ -50,6 +50,13 @@ def save_json(obj, path):
     Path(path).write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def record_command(out_dir, step, script, argv=None):
+    """記錄本步驟實際執行的指令（腳本名稱與參數），供報告附上以便重現與驗證。"""
+    args = list(sys.argv[1:] if argv is None else argv)
+    save_json({"script": Path(script).name, "args": [str(a) for a in args]},
+              work_dir(out_dir, step) / "command.json")
+
+
 def load_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 

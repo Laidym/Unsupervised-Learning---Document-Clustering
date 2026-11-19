@@ -31,7 +31,7 @@ from sklearn.feature_extraction.text import (
 from sklearn.preprocessing import normalize
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import DATA_20NG, DEFAULT_OUT, SEED, is_txt_collection, load_docs, load_json, save_json, setup_stdout, work_dir  # noqa: E402
+from common import DATA_20NG, DEFAULT_OUT, SEED, is_txt_collection, load_docs, load_json, save_json, setup_stdout, work_dir, record_command  # noqa: E402
 from tokenize_zh import WORD_PATTERN, TextAnalyzer  # noqa: E402
 
 SVD_DIM = 100
@@ -378,6 +378,7 @@ def main(argv=None):
     save_json(config, wd / "config.json")
     save_json(summary, wd / "summary.json")
 
+    record_command(args.out, "step1", __file__, argv)
     compare = comparison_table(previous, (config, summary))
     print_checkpoint(load_stats, lang, ratio, settings, info, summary, len(dropped), compare)
     print()

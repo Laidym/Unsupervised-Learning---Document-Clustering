@@ -6084,7 +6084,7 @@ H(V) = -\sum_j \frac{b_j}{n} \ln \frac{b_j}{n},
 <h2 class="anchored" data-anchor-id="輸出">4.5　輸出</h2>
 <p>每次分析的結果依演算法與群數放在各自的資料夾（如 <code>kmedoids_k8/</code>、<code>hierarchical_k5/</code>），換演算法或群數再做一次時，之前的結果會保留，方便對照；同一演算法與群數重做時會覆寫。</p>
 <pre class="text"><code>kmedoids_k8/
-├── report.html          分析報告：各群名稱、文件數與關鍵詞，評估指標、圖表、限制、文字雲與設定紀錄
+├── report.html          分析報告：各群名稱、文件數與關鍵詞，評估指標、圖表、限制、文字雲、設定紀錄；依步驟分段，各步驟附執行指令與完整程式碼
 ├── clusters.csv         doc_id, text, cluster, 群名稱（依群排序，同群文件相鄰；群內維持原始順序）
 └── clusters_files.zip   僅限 .txt 輸入：每群一個資料夾（群編號_群名稱），放入該群的文件</code></pre>
 <p>各群摘要與評估指標都在 <code>report.html</code> 中，不另外輸出 CSV。</p>
@@ -6095,7 +6095,49 @@ H(V) = -\sum_j \frac{b_j}{n} \ln \frac{b_j}{n},
 <li><strong>多群共有的詞</strong>：同時出現在多群前 30 名的詞只畫一次，以灰色標示，放在相關各群之間；這些詞正是群與群相連的地方。</li>
 </ul>
 <p>文字雲直接以網頁文字排版，不產生圖片，中文不需額外字型；排版沒有隨機性，重跑結果相同。它只是關鍵詞的視覺呈現，命名與 NPMI 仍只使用前 10 個關鍵詞。</p>
-<p>報告完整記錄每一步驟採用的設定與隨機種子，以確保結果可以重現。</p>
+<p>報告完整記錄每一步驟採用的設定與隨機種子，以確保結果可以重現。報告依步驟 1 至 4 分段，每一步驟先呈現結果，再附上驗證所需的資料：</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>報告段落</th>
+<th>結果</th>
+<th>附上的程式碼</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>步驟 1　前處理與向量化</td>
+<td>詞彙摘要</td>
+<td><code>step1_vectorize.py</code>、<code>tokenize_zh.py</code>、<code>stopwords_zh.txt</code>、<code>common.py</code></td>
+</tr>
+<tr class="even">
+<td>步驟 2　文件分群</td>
+<td>群數的選擇</td>
+<td><code>step2_cluster.py</code>、<code>clustering.py</code>、<code>kmedoids.py</code>、<code>spherical_kmeans.py</code>、<code>hierarchical.py</code></td>
+</tr>
+<tr class="odd">
+<td>步驟 3　群關鍵詞與命名</td>
+<td>各群、階層式分群的合併關係</td>
+<td><code>step3_keywords.py</code>、<code>textmetrics.py</code></td>
+</tr>
+<tr class="even">
+<td>步驟 4　評估與限制</td>
+<td>內部指標、事後比對、限制、文字雲</td>
+<td><code>step4_evaluate.py</code>、<code>wordcloud.py</code>、<code>report_html.py</code>、<code>provenance.py</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>執行指令</strong>：每一步驟附上實際執行的指令與參數。若群名稱是以檔案提供，改列直接寫出名稱的等效指令。</li>
+<li><strong>完整程式碼</strong>：每個程式檔放在主要使用它的步驟，只出現一次，可逐檔展開閱讀，並附 SHA-256，可確認與 skill 內的檔案完全相同。</li>
+<li><strong>執行環境與下載</strong>：最後的設定紀錄列出 Python 與各套件的版本、內附 jieba 的版本與詞典的 SHA-256（詞典約 9 MB，不嵌入），並可一鍵下載全部程式碼（zip，已內嵌在報告中，不需網路）。</li>
+</ul>
+<p>有了這些，使用者可以逐行檢查計算方式，或以相同資料與指令重跑，確認得到相同結果。</p>
 </section>
 <section id="開發與測試使用的資料" class="level2">
 <h2 class="anchored" data-anchor-id="開發與測試使用的資料">4.6　開發與測試使用的資料</h2>

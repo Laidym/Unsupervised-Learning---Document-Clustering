@@ -3,6 +3,7 @@ import base64
 import html
 from pathlib import Path
 
+from provenance import STEP_FILES
 from wordcloud import N_COLORS, TOP_WORDS, render_svg as word_cloud_svg
 
 CSS = """
@@ -18,6 +19,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 system-ui,-ap
 main{max-width:980px;margin:0 auto;padding:32px 16px 64px}
 h1{font-size:26px;margin:0 0 4px}
 h2{font-size:19px;margin:40px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:24px 0 8px}
 .sub{color:var(--ink2);margin:0 0 24px}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
@@ -45,6 +47,13 @@ dl.cfg{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:8p
 dl.cfg dt{color:var(--ink2)}
 dl.cfg dd{margin:0}
 .muted{color:var(--muted);font-size:13px}
+pre.code{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto;font:12.5px/1.5 ui-monospace,SFMono-Regular,Consolas,"Noto Sans Mono CJK TC",monospace;margin:6px 0 10px;tab-size:4}
+pre.cmd{white-space:pre-wrap;word-break:break-all}
+code.hash{font:12px ui-monospace,Consolas,monospace;color:var(--muted);word-break:break-all}
+details.src{border-bottom:1px solid var(--line);padding:4px 0}
+details.src summary{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}
+details.src summary strong{color:var(--ink);font-family:ui-monospace,Consolas,monospace;font-size:14px}
+a.dl{display:inline-block;margin:4px 0 8px;padding:5px 12px;border:1px solid var(--accent);border-radius:8px;color:var(--accent);text-decoration:none;font-size:14px}
 .wc-box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px}
 svg.wcloud{display:block;width:100%;height:auto;font-family:inherit}
 svg.wcloud text{text-anchor:middle;dominant-baseline:central}
@@ -99,6 +108,29 @@ def _fmt(v, nd=3):
     return "—" if v is None or v != v else f"{v:.{nd}f}"
 
 
+def _step_code(pv, step):
+    """某步驟的執行指令與完整程式碼（點檔名展開）。"""
+    if not pv:
+        return ""
+    out = ["<h3>本步驟的程式碼</h3>"]
+    cmd = pv["commands"].get(step)
+    if cmd:
+        out.append('<p>執行指令（指令中的 <code>scripts/</code> 即下列程式碼所在的資料夾；資料路徑為分析當時的位置，'
+                   "重跑時請換成資料所在的位置）：</p>")
+        out.append(f'<pre class="code cmd">{_e(cmd[0])}</pre>')
+        if cmd[1]:
+            out.append(f'<p class="muted">{_e(cmd[1])}。</p>')
+    order = STEP_FILES.get(step, ())
+    files = sorted((f for f in pv["files"] if f["step"] == step),
+                   key=lambda f: (order.index(f["name"]) if f["name"] in order else len(order), f["name"]))
+    for f in files:
+        out.append(f'<details class="src"><summary><strong>{_e(f["name"])}</strong>'
+                   f'<span class="muted">{f["lines"]:,} 行</span>'
+                   f'<code class="hash">SHA-256 {f["sha256"]}</code></summary>'
+                   f'<pre class="code">{_e(f["text"])}</pre></details>')
+    return "\n".join(out)
+
+
 def render(ctx):
     s1, s2, k, n = ctx["cfg1"], ctx["cfg2"], ctx["k"], ctx["n"]
     P = []
@@ -117,32 +149,24 @@ def render(ctx):
         f'<div class="card"><div class="v">{_e(v)}</div><div class="l">{_e(l)}</div></div>'
         for l, v in cards) + "</div>")
 
-    # 各群
-    P.append("<h2>各群</h2>")
-    ct = ctx["cluster_table"]
-    max_size = max(ct["文件數"]) or 1
-    rows = []
-    for r in ct.itertuples(index=False):
-        tag = ('<span class="tag sugg">採用建議</span>' if r.名稱來源 == "採用建議"
-               else '<span class="tag">自訂</span>')
-        bar = f'<span class="bar" style="width:{max(4, round(60 * r.文件數 / max_size))}px"></span>'
-        rows.append([str(r.群), f"<strong>{_e(r.群名稱)}</strong> {tag}",
-                     f"{bar}{r.文件數:,}（{r.文件數 / n:.1%}）", _fmt(r.NPMI),
-                     f'<span class="kw">{_e(r.關鍵詞)}</span>'])
-    P.append(_table(["群", "群名稱", "文件數", "NPMI", "關鍵詞（c-TF-IDF 前 10 名）"], rows, num_cols=(3,)))
-    P.append('<p class="muted">名稱來源：「採用建議」為採用 skill 依關鍵詞提出的建議名稱；「自訂」為使用者自行填寫。'
-             "NPMI 為該群前 10 個關鍵詞兩兩共同出現程度的平均。</p>")
+    P.append("<h2>步驟 1　前處理與向量化</h2>")
+    # 詞彙摘要
+    summ = ctx.get("summary1")
+    if summ:
+        P.append("<h3>詞彙摘要</h3>")
+        unit = summ.get("原始長度單位", "詞")
+        P.append(f'<p>詞彙量 {summ["詞彙量"]:,}；平均文件長度：原始 {summ.get("平均原始長度", "—")} {unit}，'
+                 f'去除停用詞與篩選後 {summ["平均有效詞數"]} 詞（中位數 {summ["有效詞數中位數"]:g}）。</p>')
+        rows = [[_e(t["詞"]), f'{t["總次數"]:,}', f'{t["出現篇數"]:,}', f'{t["出現比例"]:.1%}']
+                for t in summ["最高頻詞"]]
+        P.append("<details><summary>最高頻詞</summary>"
+                 + _table(["詞", "總次數", "出現篇數", "出現比例"], rows, num_cols=(1, 2, 3)) + "</details>")
 
-    if ctx.get("merge"):
-        P.append("<h2>各群的上下層關係</h2>")
-        P.append("<p>由近到遠的合併順序（Ward 連結）；越早合併的群內容越接近。</p>")
-        P.append('<ol>' + "".join(f"<li>{_e(m)}</li>" for m in ctx["merge"]) + "</ol>")
-        src = _img(ctx["images"].get("dendrogram", ""))
-        if src:
-            P.append(f'<figure><img src="{src}" alt="各群合併關係樹狀圖"><figcaption>各群的合併關係</figcaption></figure>')
+    P.append(_step_code(ctx.get("provenance"), "step1"))
 
+    P.append("<h2>步驟 2　文件分群</h2>")
     # 群數選擇
-    P.append("<h2>群數的選擇</h2>")
+    P.append("<h3>群數的選擇</h3>")
     P.append(f'<p>候選群數 k = {s2["k_min"]} 到 {s2["k_max"]}，使用者選定 <strong>k = {k}</strong>。'
              "silhouette 衡量文件是否明確屬於自己的群；NPMI 衡量各群關鍵詞是否常在同一文件出現。"
              "兩者都只宜比較相對高低。</p>")
@@ -163,8 +187,38 @@ def render(ctx):
              + _table(["k", "silhouette", "NPMI", "最小群文件數", "最大群文件數"], rows, num_cols=(1, 2, 3, 4))
              + "</details>")
 
+    P.append(_step_code(ctx.get("provenance"), "step2"))
+
+    P.append("<h2>步驟 3　群關鍵詞與命名</h2>")
+    # 各群
+    P.append("<h3>各群</h3>")
+    ct = ctx["cluster_table"]
+    max_size = max(ct["文件數"]) or 1
+    rows = []
+    for r in ct.itertuples(index=False):
+        tag = ('<span class="tag sugg">採用建議</span>' if r.名稱來源 == "採用建議"
+               else '<span class="tag">自訂</span>')
+        bar = f'<span class="bar" style="width:{max(4, round(60 * r.文件數 / max_size))}px"></span>'
+        rows.append([str(r.群), f"<strong>{_e(r.群名稱)}</strong> {tag}",
+                     f"{bar}{r.文件數:,}（{r.文件數 / n:.1%}）", _fmt(r.NPMI),
+                     f'<span class="kw">{_e(r.關鍵詞)}</span>'])
+    P.append(_table(["群", "群名稱", "文件數", "NPMI", "關鍵詞（c-TF-IDF 前 10 名）"], rows, num_cols=(3,)))
+    P.append('<p class="muted">名稱來源：「採用建議」為採用 skill 依關鍵詞提出的建議名稱；「自訂」為使用者自行填寫。'
+             "NPMI 為該群前 10 個關鍵詞兩兩共同出現程度的平均。</p>")
+
+    if ctx.get("merge"):
+        P.append("<h3>各群的上下層關係</h3>")
+        P.append("<p>由近到遠的合併順序（Ward 連結）；越早合併的群內容越接近。</p>")
+        P.append('<ol>' + "".join(f"<li>{_e(m)}</li>" for m in ctx["merge"]) + "</ol>")
+        src = _img(ctx["images"].get("dendrogram", ""))
+        if src:
+            P.append(f'<figure><img src="{src}" alt="各群合併關係樹狀圖"><figcaption>各群的合併關係</figcaption></figure>')
+
+    P.append(_step_code(ctx.get("provenance"), "step3"))
+
+    P.append("<h2>步驟 4　評估與限制</h2>")
     # 內部指標
-    P.append("<h2>內部指標</h2>")
+    P.append("<h3>內部指標</h3>")
     samp = "文件數超過 5,000 篇，以固定 seed 隨機抽樣 5,000 篇計算。" if ctx["sil_sampled"] else ""
     P.append('<ul class="plain">'
              f'<li><strong>silhouette 係數 {_fmt(ctx["silhouette"])}</strong>：範圍 −1 至 1。'
@@ -173,7 +227,7 @@ def render(ctx):
              "越高表示各群關鍵詞越常在同一篇文件共同出現，主題越連貫、越容易命名。</li></ul>")
 
     # 事後比對
-    P.append("<h2>事後比對</h2>")
+    P.append("<h3>事後比對</h3>")
     if ctx["external"] is None:
         P.append("<p>未指定標籤欄位，略過事後比對。</p>")
     else:
@@ -203,29 +257,17 @@ def render(ctx):
                  "未用於前處理、分群與選定群數。</p>")
 
     # 限制
-    P.append("<h2>限制</h2>")
+    P.append("<h3>限制</h3>")
     P.append('<ul class="plain">' + "".join(f"<li>{_e(s)}</li>" for s in ctx["fixed_limits"]) + "</ul>")
     if ctx["data_notes"]:
         P.append('<div class="note"><strong>依本次資料</strong><ul>'
                  + "".join(f"<li>{_e(s)}</li>" for s in ctx["data_notes"]) + "</ul></div>")
 
-    # 詞彙摘要
-    summ = ctx.get("summary1")
-    if summ:
-        P.append("<h2>詞彙摘要（步驟 1）</h2>")
-        unit = summ.get("原始長度單位", "詞")
-        P.append(f'<p>詞彙量 {summ["詞彙量"]:,}；平均文件長度：原始 {summ.get("平均原始長度", "—")} {unit}，'
-                 f'去除停用詞與篩選後 {summ["平均有效詞數"]} 詞（中位數 {summ["有效詞數中位數"]:g}）。</p>')
-        rows = [[_e(t["詞"]), f'{t["總次數"]:,}', f'{t["出現篇數"]:,}', f'{t["出現比例"]:.1%}']
-                for t in summ["最高頻詞"]]
-        P.append("<details><summary>最高頻詞</summary>"
-                 + _table(["詞", "總次數", "出現篇數", "出現比例"], rows, num_cols=(1, 2, 3)) + "</details>")
-
     # 文字雲
     clouds = ctx.get("word_clouds")
     if clouds:
         colored = len(clouds) <= N_COLORS
-        P.append("<h2>文字雲</h2>")
+        P.append("<h3>文字雲</h3>")
         P.append(f"<p>所有群的詞畫在同一張圖上：每群取 c-TF-IDF 權重前 {TOP_WORDS} 個詞，字越大表示越能代表該群，"
                  "粗體為前 10 個群關鍵詞（與「各群」表相同，用於命名與計算 NPMI）。"
                  "各群的位置依群中心之間的 cosine 距離排列（古典 MDS），越近表示兩群的用詞越相似；"
@@ -240,10 +282,25 @@ def render(ctx):
                  + ("" if colored else f"群數超過 {N_COLORS}，不以顏色區分群，請依群名稱標籤的位置與滑鼠提示辨識；")
                  + "多群共有的詞依它在各群的相對權重決定位置。</p>")
 
+    P.append(_step_code(ctx.get("provenance"), "step4"))
+
     # 設定紀錄
     P.append("<h2>設定紀錄</h2>")
     P.append('<dl class="cfg">' + "".join(f"<dt>{_e(a)}</dt><dd>{_e(b)}</dd>" for a, b in ctx["settings"]) + "</dl>")
     P.append('<p class="muted">所有隨機步驟皆固定隨機種子，以相同資料與設定重跑可得到相同結果。</p>')
+
+    pv = ctx.get("provenance")
+    if pv:
+        P.append("<h3>執行環境</h3>")
+        env = "、".join(f"{_e(a)} {_e(b)}" for a, b in pv["environment"])
+        P.append(f"<p>{env}。內附的 jieba 與詞典檔 dict.txt.big 未嵌入本報告（詞典約 9 MB）"
+                 + (f'，詞典 SHA-256：<code class="hash">{pv["jieba_dict_sha256"]}</code>' if pv["jieba_dict_sha256"] else "")
+                 + "。</p>")
+        P.append("<h3>全部程式碼</h3>")
+        n_lines = sum(f["lines"] for f in pv["files"])
+        P.append(f'<p>各步驟的程式碼已分別附在該步驟最後，共 {len(pv["files"])} 個檔案、{n_lines:,} 行。'
+                 "每個檔案附 SHA-256，可用來確認與 skill 內的檔案完全相同。</p>")
+        P.append(f'<a class="dl" href="{pv["zip_uri"]}" download="scripts.zip">下載全部程式碼（scripts.zip）</a>')
 
     return ("<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
