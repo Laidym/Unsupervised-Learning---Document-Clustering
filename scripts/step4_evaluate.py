@@ -4,7 +4,7 @@
 事後比對（自動）：步驟 1 有指定標籤欄才計算 ARI、NMI、純度；否則略過。標籤只在本步驟讀取。
 限制：固定說明四項，並依本次資料提示。
 文字雲：所有群畫在同一張圖上（scripts/wordcloud.py）；只放在 HTML 報告。
-程式碼：報告依步驟 1–4 分段，每段最後附該步驟的執行指令與完整程式碼（scripts/provenance.py），供使用者驗證與重現。
+重現套件：在結果資料夾寫出 reproduce/（reproduce.qmd＋程式碼，scripts/reproduce.py），供使用者在自己的電腦重跑。
 
 輸出：<out>/<演算法>_k<k>/report.html（單一檔案，圖片內嵌，記錄所有設定與 seed），與步驟 3 的結果檔放在一起；
 文字版報告印在標準輸出。
@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import DEFAULT_OUT, load_json, record_command, result_dir, setup_stdout, work_dir  # noqa: E402
 from clustering import ALGORITHMS, silhouette  # noqa: E402
 from hierarchical import cluster_linkage, merge_steps  # noqa: E402
-from provenance import collect as collect_provenance  # noqa: E402
+from reproduce import write_package  # noqa: E402
 from report_html import render as render_html  # noqa: E402
 from step2_cluster import plot_k_selection, plot_overview_dendrogram  # noqa: E402
 from textmetrics import cluster_npmi, top_terms  # noqa: E402
@@ -329,12 +329,14 @@ def main(argv=None):
         "fixed_limits": FIXED_LIMITS,
         "word_clouds": word_clouds,
         "cloud_anchors": cluster_anchors(vectors, clusters, k),
-        "provenance": collect_provenance(out, load_json),
         "images": {"k_selection": k_png,
                    "dendrogram": w3 / "dendrogram.png" if merge else "",
                    "dendrogram_overview": overview},
     })
-    rpath = result_dir(out, cfg2["algorithm"], k) / "report.html"
+    rdir = result_dir(out, cfg2["algorithm"], k)
+    pkg = write_package(out, rdir, cfg1, load_json)
+    ctx["reproduce"] = {"data": pkg[1]} if pkg else None
+    rpath = rdir / "report.html"
     rpath.write_text(render_html(ctx), encoding="utf-8")
     old_md = out / "report.md"
     if old_md.exists():            # 舊版輸出，避免與 HTML 報告不一致
@@ -342,6 +344,8 @@ def main(argv=None):
 
     print(report)
     print(f"已寫出 {rpath}")
+    if pkg:
+        print(f"已寫出重現套件 {pkg[0]}（reproduce.qmd 與程式碼，供使用者在自己的電腦重跑）")
 
 
 if __name__ == "__main__":

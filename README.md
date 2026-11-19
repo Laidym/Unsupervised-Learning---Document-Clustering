@@ -429,9 +429,10 @@ HTML 網頁、PDF、Word 等格式需先轉為純文字。skill 會自動處理�
 
 ``` text
 kmedoids_k8/
-├── report.html          分析報告：各群名稱、文件數與關鍵詞，評估指標、圖表、限制、文字雲、設定紀錄；依步驟分段，各步驟附執行指令與完整程式碼
+├── report.html          分析報告：各群名稱、文件數與關鍵詞，評估指標、圖表、限制、文字雲、設定紀錄
 ├── clusters.csv         表格輸入（CSV、Excel）：doc_id, text, cluster, 群名稱（依群排序，同群文件相鄰；群內維持原始順序）
-└── clusters_files.zip   .txt 資料夾或 zip 輸入：每群一個資料夾（群編號_群名稱），放入該群的文件
+├── clusters_files.zip   .txt 資料夾或 zip 輸入：每群一個資料夾（群編號_群名稱），放入該群的文件
+└── reproduce/           重現套件：reproduce.qmd 與程式碼，在自己的電腦重跑（見下方）
 ```
 
 兩種結果檔只會有一種：上傳表格得到 `clusters.csv`；上傳 .txt 檔得到 `clusters_files.zip`，不另外輸出 CSV。
@@ -446,20 +447,23 @@ kmedoids_k8/
 
 文字雲直接以網頁文字排版，不產生圖片，中文不需額外字型；排版沒有隨機性，重跑結果相同。它只是關鍵詞的視覺呈現，命名與 NPMI 仍只使用前 10 個關鍵詞。
 
-報告完整記錄每一步驟採用的設定與隨機種子，以確保結果可以重現。報告依步驟 1 至 4 分段，每一步驟先呈現結果，再附上驗證所需的資料：
+報告完整記錄每一步驟採用的設定與隨機種子，以確保結果可以重現。報告本身不放程式碼；結果資料夾另外附上重現套件 `reproduce/`，讓使用者在自己的電腦以相同的程式碼與參數重跑：
 
-| 報告段落 | 結果 | 附上的程式碼 |
-|----|----|----|
-| 步驟 1　前處理與向量化 | 詞彙摘要 | `step1_vectorize.py`、`tokenize_zh.py`、`stopwords_zh.txt`、`common.py` |
-| 步驟 2　文件分群 | 群數的選擇 | `step2_cluster.py`、`clustering.py`、`kmedoids.py`、`spherical_kmeans.py`、`hierarchical.py` |
-| 步驟 3　群關鍵詞與命名 | 各群、階層式分群的合併關係 | `step3_keywords.py`、`textmetrics.py` |
-| 步驟 4　評估與限制 | 內部指標、事後比對、限制、文字雲 | `step4_evaluate.py`、`wordcloud.py`、`report_html.py`、`provenance.py` |
+``` text
+reproduce/
+├── reproduce.qmd   依步驟 1–4 執行本次實際使用的參數
+├── scripts/        本次使用的程式碼
+├── vendor/jieba/   僅限含中文字的資料
+└── data/           僅限內附的 20 Newsgroups 範例資料
+```
 
-- **執行指令**：每一步驟附上實際執行的指令與參數。若群名稱是以檔案提供，改列直接寫出名稱的等效指令。
-- **完整程式碼**：每個程式檔放在主要使用它的步驟，只出現一次，可逐檔展開閱讀，並附 SHA-256，可確認與 skill 內的檔案完全相同。
-- **執行環境與下載**：最後的設定紀錄列出 Python 與各套件的版本、內附 jieba 的版本與詞典的 SHA-256（詞典約 9 MB，不嵌入），並可一鍵下載全部程式碼（zip，已內嵌在報告中，不需網路）。
-
-有了這些，使用者可以逐行檢查計算方式，或以相同資料與指令重跑，確認得到相同結果。
+> [!TIP]
+> **自己重跑**
+>
+> 1. 把原始資料放進 `reproduce/`，與 `reproduce.qmd` 同一層，檔名不要更改（報告的設定紀錄會寫出檔名）。使用內附範例資料時不需這一步。
+> 2. 在 RStudio（或其他裝有 Quarto 與 R 的環境）開啟 `reproduce.qmd`，按 **Render**。
+>
+> 不需修改程式碼，也不需自行安裝 Python：第一次執行時，R 套件 reticulate 會自動下載與原分析相同版本的 Python 與套件（需要網路，可能要幾分鐘），之後沿用。重跑的結果在 `reproduce/output/`，包含一份新的 `report.html`。
 
 ## 4.6　開發與測試使用的資料
 

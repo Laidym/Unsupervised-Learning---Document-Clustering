@@ -53,7 +53,7 @@
 - 事後比對（自動）：有指定標籤欄才計算 ARI、NMI、純度；否則略過。
 - 限制：固定說明（硬歸屬、詞袋忽略語序、群數無唯一解、群名由人決定〔可採用建議名稱〕），並依資料提示：有效詞數中位數 < 10、群過小、群大小差 > 5 倍、某群 NPMI 低於各群平均 0.1 以上、silhouette < 0.1、篩選後無詞文件、k 落在上限、單一文件占某群關鍵詞出現次數 > 30%、兩群前 10 關鍵詞相同 ≥ 5 個、中英混雜（中文字元占中文字元＋英文詞介於 5% 與 70% 之間）、空白與重複列 > 10%。
 - 文字雲：只放在 HTML 報告最後（設定紀錄之前），所有群合成一張（使用者決定，用來呈現群與群之間的關聯，不做每群一張）。實作在 `scripts/wordcloud.py`，以 SVG 文字排版，不用 wordcloud 套件（沙盒沒有）也不產生圖片，中文不需字型。每群 c-TF-IDF 前 30 個詞，字級與「權重 ÷ 該群最高權重」成正比，前 10 個為粗體；群數 ≤ 8 時依群著色（報告 CSS 的 8 個類別色，不循環），超過則不著色、只靠群名稱標籤。群的位置：群中心（群內向量平均再正規化）兩兩 cosine 距離 → 古典 MDS（Torgerson 1952）二維。多群共有的詞只畫一次，灰色，位置為相關各群依相對權重的加權平均。排版：先放群名稱標籤，再依字級由大到小沿橢圓螺旋找不重疊的位置，無隨機性。只是呈現，命名與 NPMI 仍只用前 10 個。
-- 程式碼嵌入報告（使用者決定依步驟分段，不放在最後的附錄）：報告分成「步驟 1–4」四段（詞彙摘要→步驟 1；群數的選擇→步驟 2；各群、上下層關係→步驟 3；內部指標、事後比對、限制、文字雲→步驟 4），每段最後附「本步驟的程式碼」：執行指令＋該步驟的完整檔案。檔案歸屬在 `provenance.STEP_FILES`，每個檔案只出現一次，新增程式檔必須加入（有測試）。執行環境與 scripts.zip 下載放在最後的設定紀錄。供使用者驗證與重現，實作在 `scripts/provenance.py`。各步驟以 `common.record_command` 把實際參數存成 `work/stepN/command.json`，報告列出指令（步驟 3 以 `--names-file` 提供名稱時改列 `--names` 的等效指令）；列 Python 與套件版本、jieba 版本與詞典 SHA-256（詞典不嵌入）；嵌入 scripts/ 所有 .py 與 `stopwords_zh.txt`，換行轉為 LF 後計算 SHA-256（與 text-clustering.zip 一致），並以 data URI 提供 scripts.zip 下載。測試若檢查報告「不含」某段文字，要比對 HTML 標籤（如 `<h2>…`），因為程式碼本身也在報告中。
+- 重現套件（使用者決定：報告不嵌入程式碼，改附 qmd；先前的「依步驟嵌入程式碼」與「qmd 與報告逐項比對」都已撤回）：步驟 4 在結果資料夾寫出 `reproduce/`（`scripts/reproduce.py`）。各步驟成功結束時以 `common.record_command` 把參數存成 `work/stepN/command.json`；`portable_args` 去掉 `--out`、取出步驟 1 的 `--input`、把 `--names-file`／`--suggestions-file` 換成直接列出名稱。原始資料由使用者放在 qmd 同一層，qmd 只用檔名（`data_name`），使用者不需改程式碼。qmd 用 knitr 引擎，假設使用者有 Quarto＋R（如 RStudio），按 Render 即可：R chunk 安裝 reticulate（≥ 1.41）並以 `py_require` 指定與原分析相同版本的 Python 與套件，使用者不需自行安裝 Python；各步驟以 import 後呼叫 `main(argv)` 執行，結果寫到 `reproduce/output/`；qmd 設定環境變數 `TEXT_CLUSTERING_REPRODUCING`，重跑時不再寫出套件。不做與報告的比對。附 `scripts/`（換行轉 LF）；含中文字（`zh_ratio > 0`）才附 `vendor/jieba/`；`--dataset 20ng` 才附 `data/`；原始資料不附。報告的設定紀錄說明重跑方式與資料檔名。測試直接執行 qmd 的 Python 區塊（不需 R 與 Quarto）。
 
 ## 硬性規則
 
@@ -95,7 +95,7 @@ data/               20 Newsgroups 範例子集（打包進 skill）；bbc-fullte
 tests/              測試
 ```
 
-輸出（`output/<演算法>_k<k>/`，如 `kmedoids_k8/`；不同演算法或群數分開保存，同一組合重跑時覆寫，舊版直接寫在 `output/` 的結果檔由步驟 3 移除）：`report.html`，以及表格輸入的 `clusters.csv`（doc_id, text, cluster, 群名稱；依群穩定排序，同群文件相鄰）或 .txt 資料夾／zip 輸入的 `clusters_files.zip`（每群一個資料夾「群編號_群名稱」，檔名為原始相對路徑，子資料夾以 `__` 連接；使用者決定此時不輸出 `clusters.csv`）。群摘要與指標只放在報告中，不另輸出 CSV（指標的中間結果在 `work/step4/metrics.csv`）。複製到 claude.ai 下載區時，資料夾名稱前加上資料簡稱（`<資料簡稱>_<演算法>_k<k>/`），避免不同資料互相覆蓋。
+輸出（`output/<演算法>_k<k>/`，如 `kmedoids_k8/`；不同演算法或群數分開保存，同一組合重跑時覆寫，舊版直接寫在 `output/` 的結果檔由步驟 3 移除）：`report.html`，以及表格輸入的 `clusters.csv`（doc_id, text, cluster, 群名稱；依群穩定排序，同群文件相鄰）或 .txt 資料夾／zip 輸入的 `clusters_files.zip`（每群一個資料夾「群編號_群名稱」，檔名為原始相對路徑，子資料夾以 `__` 連接；使用者決定此時不輸出 `clusters.csv`），以及重現套件 `reproduce/`。群摘要與指標只放在報告中，不另輸出 CSV（指標的中間結果在 `work/step4/metrics.csv`）。複製到 claude.ai 下載區時，資料夾名稱前加上資料簡稱（`<資料簡稱>_<演算法>_k<k>/`），避免不同資料互相覆蓋。
 
 ## 開發順序
 
