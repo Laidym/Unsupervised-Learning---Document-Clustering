@@ -3,6 +3,8 @@ import base64
 import html
 from pathlib import Path
 
+from wordcloud import N_COLORS, TOP_WORDS, render_svg as word_cloud_svg
+
 CSS = """
 :root{--bg:#fcfcfb;--surface:#ffffff;--ink:#0b0b0b;--ink2:#52514e;--muted:#7a7974;
 --line:#e4e3df;--accent:#2a78d6;--accent-soft:#cde2fb;--warn-bg:#fdf3e1;--warn-ink:#6b4508;
@@ -43,6 +45,28 @@ dl.cfg{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:8p
 dl.cfg dt{color:var(--ink2)}
 dl.cfg dd{margin:0}
 .muted{color:var(--muted);font-size:13px}
+.wc-box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px}
+svg.wcloud{display:block;width:100%;height:auto;font-family:inherit}
+svg.wcloud text{text-anchor:middle;dominant-baseline:central}
+svg.wcloud text.plain{fill:var(--ink)}
+svg.wcloud text.shared{fill:var(--muted)}
+svg.wcloud .lbl rect{fill:var(--surface);stroke-width:2}
+svg.wcloud .lbl rect.plain{stroke:var(--ink2)}
+svg.wcloud .lbl text{fill:var(--ink)}
+svg.wcloud text:hover{text-decoration:underline}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 2px 0;font-size:13px;color:var(--ink2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+:root{--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s8:#e34948}
+@media (prefers-color-scheme:dark){:root{--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;
+--s6:#0ca30c;--s7:#9085e9;--s8:#e66767}}
+svg.wcloud text.s1{fill:var(--s1)}svg.wcloud .lbl rect.s1{stroke:var(--s1)}.legend i.s1{background:var(--s1)}
+svg.wcloud text.s2{fill:var(--s2)}svg.wcloud .lbl rect.s2{stroke:var(--s2)}.legend i.s2{background:var(--s2)}
+svg.wcloud text.s3{fill:var(--s3)}svg.wcloud .lbl rect.s3{stroke:var(--s3)}.legend i.s3{background:var(--s3)}
+svg.wcloud text.s4{fill:var(--s4)}svg.wcloud .lbl rect.s4{stroke:var(--s4)}.legend i.s4{background:var(--s4)}
+svg.wcloud text.s5{fill:var(--s5)}svg.wcloud .lbl rect.s5{stroke:var(--s5)}.legend i.s5{background:var(--s5)}
+svg.wcloud text.s6{fill:var(--s6)}svg.wcloud .lbl rect.s6{stroke:var(--s6)}.legend i.s6{background:var(--s6)}
+svg.wcloud text.s7{fill:var(--s7)}svg.wcloud .lbl rect.s7{stroke:var(--s7)}.legend i.s7{background:var(--s7)}
+svg.wcloud text.s8{fill:var(--s8)}svg.wcloud .lbl rect.s8{stroke:var(--s8)}.legend i.s8{background:var(--s8)}
 """
 
 
@@ -196,6 +220,25 @@ def render(ctx):
                 for t in summ["最高頻詞"]]
         P.append("<details><summary>最高頻詞</summary>"
                  + _table(["詞", "總次數", "出現篇數", "出現比例"], rows, num_cols=(1, 2, 3)) + "</details>")
+
+    # 文字雲
+    clouds = ctx.get("word_clouds")
+    if clouds:
+        colored = len(clouds) <= N_COLORS
+        P.append("<h2>文字雲</h2>")
+        P.append(f"<p>所有群的詞畫在同一張圖上：每群取 c-TF-IDF 權重前 {TOP_WORDS} 個詞，字越大表示越能代表該群，"
+                 "粗體為前 10 個群關鍵詞（與「各群」表相同，用於命名與計算 NPMI）。"
+                 "各群的位置依群中心之間的 cosine 距離排列（古典 MDS），越近表示兩群的用詞越相似；"
+                 "同時出現在多群的詞只畫一次，以灰色標示，放在相關各群之間。滑鼠移到詞上可看所屬群與權重。</p>")
+        legend = ""
+        if colored:
+            legend = ('<div class="legend">' + "".join(
+                f'<span><i class="s{c["cluster"] + 1}"></i>群 {c["cluster"]} {_e(c["name"])}</span>' for c in clouds)
+                + '<span><i style="background:var(--muted)"></i>多群共有的詞</span></div>')
+        P.append(f'<figure class="wc-box">{word_cloud_svg(clouds, ctx["cloud_anchors"])}{legend}</figure>')
+        P.append('<p class="muted">位置只是把高維距離壓到平面上的近似，群與群之間的遠近僅供參考；'
+                 + ("" if colored else f"群數超過 {N_COLORS}，不以顏色區分群，請依群名稱標籤的位置與滑鼠提示辨識；")
+                 + "多群共有的詞依它在各群的相對權重決定位置。</p>")
 
     # 設定紀錄
     P.append("<h2>設定紀錄</h2>")

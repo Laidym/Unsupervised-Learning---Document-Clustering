@@ -426,12 +426,20 @@ HTML 網頁、PDF、Word 等格式需先轉為純文字。skill 會自動處理�
 
 ``` text
 kmedoids_k8/
-├── report.html          分析報告：各群名稱、文件數與關鍵詞，評估指標、圖表、限制與設定紀錄
+├── report.html          分析報告：各群名稱、文件數與關鍵詞，評估指標、圖表、限制、文字雲與設定紀錄
 ├── clusters.csv         doc_id, text, cluster, 群名稱（依群排序，同群文件相鄰；群內維持原始順序）
 └── clusters_files.zip   僅限 .txt 輸入：每群一個資料夾（群編號_群名稱），放入該群的文件
 ```
 
 各群摘要與評估指標都在 `report.html` 中，不另外輸出 CSV。
+
+報告最後（設定紀錄之前）附一張涵蓋所有群的文字雲，用來看各群之間的關聯：
+
+- **詞**：每群取 c-TF-IDF 權重前 30 個詞，字級與「該詞權重 ÷ 該群最高權重」成正比，前 10 個關鍵詞為粗體；群數不超過 8 時，以顏色區分群。
+- **群的位置**：先算各群中心（群內文件向量的平均）兩兩的 cosine 距離，再以古典多維尺度法 (Torgerson 1952) 排到平面上，用詞越相似的群放得越近。高維距離壓到平面只是近似，遠近僅供參考。
+- **多群共有的詞**：同時出現在多群前 30 名的詞只畫一次，以灰色標示，放在相關各群之間；這些詞正是群與群相連的地方。
+
+文字雲直接以網頁文字排版，不產生圖片，中文不需額外字型；排版沒有隨機性，重跑結果相同。它只是關鍵詞的視覺呈現，命名與 NPMI 仍只使用前 10 個關鍵詞。
 
 報告完整記錄每一步驟採用的設定與隨機種子，以確保結果可以重現。
 
@@ -572,6 +580,12 @@ Strehl, Alexander, and Joydeep Ghosh. 2002. “Cluster Ensembles: A Knowledge Re
 <div id="ref-jieba" class="csl-entry">
 
 Sun, Junyi. n.d. “jieba: Chinese Text Segmentation”. GitHub repository. <https://github.com/fxsjy/jieba>.
+
+</div>
+
+<div id="ref-torgerson1952" class="csl-entry">
+
+Torgerson, Warren S. 1952. “Multidimensional Scaling: I. Theory and Method”. *Psychometrika* 17 (4): 401～19. <https://doi.org/10.1007/BF02288916>.
 
 </div>
 

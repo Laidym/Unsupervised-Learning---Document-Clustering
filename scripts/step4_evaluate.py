@@ -3,6 +3,7 @@
 內部指標（固定）：silhouette、關鍵詞一致性 NPMI。
 事後比對（自動）：步驟 1 有指定標籤欄才計算 ARI、NMI、純度；否則略過。標籤只在本步驟讀取。
 限制：固定說明四項，並依本次資料提示。
+文字雲：所有群畫在同一張圖上（scripts/wordcloud.py）；只放在 HTML 報告。
 
 輸出：<out>/<演算法>_k<k>/report.html（單一檔案，圖片內嵌，記錄所有設定與 seed），與步驟 3 的結果檔放在一起；
 文字版報告印在標準輸出。
@@ -24,7 +25,8 @@ from clustering import ALGORITHMS, silhouette  # noqa: E402
 from hierarchical import cluster_linkage, merge_steps  # noqa: E402
 from report_html import render as render_html  # noqa: E402
 from step2_cluster import plot_k_selection, plot_overview_dendrogram  # noqa: E402
-from textmetrics import cluster_npmi  # noqa: E402
+from textmetrics import cluster_npmi, top_terms  # noqa: E402
+from wordcloud import TOP_WORDS, cluster_anchors  # noqa: E402
 
 FIXED_LIMITS = [
     "每篇文件只能屬於一群；同時涉及多個主題的文件會被歸入單一群。",
@@ -288,6 +290,10 @@ def main(argv=None):
                         language=cfg1["language"], zh_ratio=cfg1.get("zh_ratio"),
                         load_stats=cfg1["load_stats"])
 
+    cloud = top_terms(counts, clusters, k, vocab, top_n=TOP_WORDS)
+    word_clouds = [{"cluster": c, "name": names[c], "terms": t["terms"], "weights": t["weights"]}
+                   for c, t in enumerate(cloud)]
+
     rows = [("silhouette", "整體", sil), ("NPMI", "整體", npmi)]
     rows += [("NPMI", f"群 {c} {names[c]}", float(v)) for c, v in enumerate(npmi_per)]
     if external:
@@ -318,6 +324,8 @@ def main(argv=None):
         "summary1": load_json(w1 / "summary.json") if (w1 / "summary.json").exists() else None,
         "settings": settings_list(ctx),
         "fixed_limits": FIXED_LIMITS,
+        "word_clouds": word_clouds,
+        "cloud_anchors": cluster_anchors(vectors, clusters, k),
         "images": {"k_selection": k_png,
                    "dendrogram": w3 / "dendrogram.png" if merge else "",
                    "dendrogram_overview": overview},
