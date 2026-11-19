@@ -95,7 +95,7 @@ data/               20 Newsgroups 範例子集（打包進 skill）；bbc-fullte
 tests/              測試
 ```
 
-輸出（`output/<演算法>_k<k>/`，如 `kmedoids_k8/`；不同演算法或群數分開保存，同一組合重跑時覆寫，舊版直接寫在 `output/` 的結果檔由步驟 3 移除）：`report.html`、`clusters.csv`（doc_id, text, cluster, 群名稱；依群穩定排序，同群文件相鄰）；輸入為 .txt 資料夾或 zip 時另有 `clusters_files.zip`（每群一個資料夾「群編號_群名稱」，檔名為原始相對路徑，子資料夾以 `__` 連接）。群摘要與指標只放在報告中，不另輸出 CSV（指標的中間結果在 `work/step4/metrics.csv`）。複製到 claude.ai 下載區時，資料夾名稱前加上資料簡稱（`<資料簡稱>_<演算法>_k<k>/`），避免不同資料互相覆蓋。
+輸出（`output/<演算法>_k<k>/`，如 `kmedoids_k8/`；不同演算法或群數分開保存，同一組合重跑時覆寫，舊版直接寫在 `output/` 的結果檔由步驟 3 移除）：`report.html`，以及表格輸入的 `clusters.csv`（doc_id, text, cluster, 群名稱；依群穩定排序，同群文件相鄰）或 .txt 資料夾／zip 輸入的 `clusters_files.zip`（每群一個資料夾「群編號_群名稱」，檔名為原始相對路徑，子資料夾以 `__` 連接；使用者決定此時不輸出 `clusters.csv`）。群摘要與指標只放在報告中，不另輸出 CSV（指標的中間結果在 `work/step4/metrics.csv`）。複製到 claude.ai 下載區時，資料夾名稱前加上資料簡稱（`<資料簡稱>_<演算法>_k<k>/`），避免不同資料互相覆蓋。
 
 ## 開發順序
 

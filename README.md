@@ -430,9 +430,11 @@ HTML 網頁、PDF、Word 等格式需先轉為純文字。skill 會自動處理�
 ``` text
 kmedoids_k8/
 ├── report.html          分析報告：各群名稱、文件數與關鍵詞，評估指標、圖表、限制、文字雲、設定紀錄；依步驟分段，各步驟附執行指令與完整程式碼
-├── clusters.csv         doc_id, text, cluster, 群名稱（依群排序，同群文件相鄰；群內維持原始順序）
-└── clusters_files.zip   僅限 .txt 輸入：每群一個資料夾（群編號_群名稱），放入該群的文件
+├── clusters.csv         表格輸入（CSV、Excel）：doc_id, text, cluster, 群名稱（依群排序，同群文件相鄰；群內維持原始順序）
+└── clusters_files.zip   .txt 資料夾或 zip 輸入：每群一個資料夾（群編號_群名稱），放入該群的文件
 ```
+
+兩種結果檔只會有一種：上傳表格得到 `clusters.csv`；上傳 .txt 檔得到 `clusters_files.zip`，不另外輸出 CSV。
 
 各群摘要與評估指標都在 `report.html` 中，不另外輸出 CSV。
 
