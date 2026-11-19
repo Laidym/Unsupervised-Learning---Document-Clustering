@@ -19,7 +19,7 @@ from clustering import (  # noqa: E402
     ALGORITHMS, KMEDOIDS_MAX, LARGE_N_WARNING, N_INIT, needs_distance_matrix, run_clustering, silhouette,
     suggest_algorithm,
 )
-from common import DEFAULT_OUT, SEED, cjk_font, load_json, save_json, setup_stdout, work_dir  # noqa: E402
+from common import DEFAULT_OUT, SEED, cjk_font, load_json, save_json, setup_stdout, work_dir, record_command  # noqa: E402
 from hierarchical import build_linkage, cluster_linkage, cut_positions, plot_dendrogram  # noqa: E402
 from kmedoids import cosine_distance_matrix  # noqa: E402
 from textmetrics import cluster_npmi, top_terms  # noqa: E402
@@ -285,6 +285,7 @@ def main(argv=None):
     elif (wd / "linkage.npy").exists():
         (wd / "linkage.npy").unlink()
 
+    record_command(args.out, "step2", __file__, argv)
     print_checkpoint(n, (k_min, k_max), metrics, results, png, zh_font, algorithm, D is None)
     if dendro is not None:
         print(f"樹狀圖（切成 k = {k_max} 群時，各群的上下層關係；虛線標出各候選 k 的切割位置，"

@@ -26,7 +26,7 @@ import pandas as pd
 from scipy import sparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import DEFAULT_OUT, cjk_font, load_json, result_dir, save_json, setup_stdout, work_dir  # noqa: E402
+from common import DEFAULT_OUT, cjk_font, load_json, result_dir, save_json, setup_stdout, work_dir, record_command  # noqa: E402
 from hierarchical import cluster_linkage, merge_steps, plot_dendrogram  # noqa: E402
 from textmetrics import TOP_N, top_terms  # noqa: E402
 
@@ -191,6 +191,7 @@ def main(argv=None):
     elif zpath.exists():
         zpath.unlink()
 
+    record_command(args.out, "step3", __file__, argv)
     print()
     print("群名稱：")
     for c, (s, src) in enumerate(zip(names, sources)):
