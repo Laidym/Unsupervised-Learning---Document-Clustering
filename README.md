@@ -67,7 +67,7 @@ flowchart TD
   subgraph S4["步驟 4　評估與限制"]
     direction TB
     I["內部指標：silhouette、NPMI"] --> J{"是否指定標籤欄？"}
-    J -->|是| K["事後比對：ARI、NMI、純度"]
+    J -->|是| K["事後比對：ARI、純度"]
     J -->|否| L["略過事後比對"]
   end
 
@@ -251,7 +251,7 @@ min_df 為整數時代表最少出現篇數，max_df 為小數時代表最多出
 | silhouette 係數 (Rousseeuw 1987) | 每篇文件比較「與同群文件的平均距離」及「與最近他群文件的平均距離」，再取平均；文件數超過 5,000 篇時，以固定 seed 隨機抽樣 5,000 篇計算 | 範圍 −1 至 1。文字資料數值通常偏低，宜比較不同群數的相對高低 |
 | 關鍵詞一致性（NPMI，normalized pointwise mutual information，正規化點互資訊）(Newman et al. 2010; Bouma 2009) | 各群關鍵詞兩兩計算「實際共同出現於同一文件的頻率」相對於「彼此獨立時的預期頻率」，正規化後取平均 | 範圍 −1 至 1。越高表示關鍵詞語意越連貫、越容易命名 |
 
-**事後比對**（自動執行）：若步驟 1 指定了標籤欄位，skill 以 ARI（adjusted Rand index，調整蘭德指數）(Hubert and Arabie 1985)、NMI（normalized mutual information，正規化互資訊）(Strehl and Ghosh 2002) 與純度 (Manning, Raghavan, and Schütze 2008) 量化分群與既有分類的吻合程度；未指定則略過。既有分類只是一種分法，不吻合不代表分群錯誤。
+**事後比對**（自動執行）：若步驟 1 指定了標籤欄位，skill 以 ARI（adjusted Rand index，調整蘭德指數）(Hubert and Arabie 1985) 與純度 (Manning, Raghavan, and Schütze 2008) 量化分群與既有分類的吻合程度；未指定則略過。既有分類只是一種分法，不吻合不代表分群錯誤。
 
 > [!IMPORTANT]
 >
@@ -339,21 +339,7 @@ E = \frac{\sum_i\binom{a_i}{2}\sum_j\binom{b_j}{2}}{\binom{n}{2}},
 
 $`E`$ 為隨機分群（各群、各類別大小不變）時的期望值。*流程角色：步驟 4 事後比對。*
 
-**NMI（正規化互資訊）**　從資訊的角度比較兩種分法：得知一篇文件的群別後，能減少多少對其標籤的不確定性。0 表示兩者毫無關聯，1 表示完全對應 (Strehl and Ghosh 2002)。令 $`U`$ 為群別、$`V`$ 為標籤，沿用上式符號：
-
-``` math
-I(U;V) = \sum_{ij} \frac{n_{ij}}{n} \ln \frac{n\, n_{ij}}{a_i\, b_j}, \qquad
-H(U) = -\sum_i \frac{a_i}{n} \ln \frac{a_i}{n}, \qquad
-H(V) = -\sum_j \frac{b_j}{n} \ln \frac{b_j}{n},
-```
-
-``` math
-\text{NMI} = \frac{I(U;V)}{\tfrac{1}{2}\left[H(U) + H(V)\right]}.
-```
-
-本 skill 以算術平均正規化（scikit-learn 預設）；Strehl and Ghosh (2002) 原文使用幾何平均 $`\sqrt{H(U)H(V)}`$，兩者數值相近。*流程角色：步驟 4 事後比對。*
-
-**純度**　每一群取其中最多數的標籤，將各群的多數文件數加總後除以總文件數。直觀易懂，但群數越多純度越高（每篇文件自成一群時為 1），因此須搭配 ARI 或 NMI 解讀 (Manning, Raghavan, and Schütze 2008)。
+**純度**　每一群取其中最多數的標籤，將各群的多數文件數加總後除以總文件數。直觀易懂，但群數越多純度越高（每篇文件自成一群時為 1），因此須搭配 ARI 解讀 (Manning, Raghavan, and Schütze 2008)。
 
 ``` math
 \text{純度} = \frac{1}{n} \sum_{i=1}^{k} \max_j n_{ij}.
@@ -597,12 +583,6 @@ Schubert, Erich, and Peter J. Rousseeuw. 2021. “Fast and Eager k-Medoids Clust
 <div id="ref-steinbach2000" class="csl-entry">
 
 Steinbach, Michael, George Karypis, and Vipin Kumar. 2000. “A Comparison of Document Clustering Techniques”. In *KDD Workshop on Text Mining*.
-
-</div>
-
-<div id="ref-strehl2002" class="csl-entry">
-
-Strehl, Alexander, and Joydeep Ghosh. 2002. “Cluster Ensembles: A Knowledge Reuse Framework for Combining Multiple Partitions”. *Journal of Machine Learning Research* 3: 583～617.
 
 </div>
 

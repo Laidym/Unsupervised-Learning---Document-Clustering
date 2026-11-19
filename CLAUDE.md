@@ -50,7 +50,7 @@
 ### 步驟 4　評估與限制
 
 - 內部指標（固定）：silhouette、關鍵詞一致性 NPMI。
-- 事後比對（自動）：有指定標籤欄才計算 ARI、NMI、純度；否則略過。
+- 事後比對（自動）：有指定標籤欄才計算 ARI、純度；否則略過（NMI 已依使用者決定移除）。
 - 限制：固定說明（硬歸屬、詞袋忽略語序、群數無唯一解、群名由人決定〔可採用建議名稱〕），並依資料提示：有效詞數中位數 < 10、群過小、群大小差 > 5 倍、某群 NPMI 低於各群平均 0.1 以上、silhouette < 0.1、篩選後無詞文件、k 落在上限、單一文件占某群關鍵詞出現次數 > 30%、兩群前 10 關鍵詞相同 ≥ 5 個、中英混雜（中文字元占中文字元＋英文詞介於 5% 與 70% 之間）、空白與重複列 > 10%。
 - 文字雲：只放在 HTML 報告最後（設定紀錄之前），所有群合成一張（使用者決定，用來呈現群與群之間的關聯，不做每群一張）。實作在 `scripts/wordcloud.py`，以 SVG 文字排版，不用 wordcloud 套件（沙盒沒有）也不產生圖片，中文不需字型。每群 c-TF-IDF 前 30 個詞，字級與「權重 ÷ 該群最高權重」成正比，前 10 個為粗體；群數 ≤ 8 時依群著色（報告 CSS 的 8 個類別色，不循環），超過則不著色、只靠群名稱標籤。群的位置：群中心（群內向量平均再正規化）兩兩 cosine 距離 → 古典 MDS（Torgerson 1952）二維。多群共有的詞只畫一次，灰色，位置為相關各群依相對權重的加權平均。排版：先放群名稱標籤，再依字級由大到小沿橢圓螺旋找不重疊的位置，無隨機性。只是呈現，命名與 NPMI 仍只用前 10 個。
 - 報告由 qmd 產生（使用者決定：先有 `report.qmd`，`report.html` 是它 render 的結果；先前的「報告嵌入程式碼」、「另附 qmd 重現並與報告比對」都已撤回）：步驟 4 的 `evaluate(out)` 計算一切並回傳 ctx；`main` 印出文字報告後呼叫 `report_qmd.build_report`：寫出 `report.qmd`（`scripts/report_qmd.py`）＋ `scripts/`（LF）＋含中文字才附的 `vendor/jieba/`＋`--dataset 20ng` 才附的 `data/`，把原始資料以去前綴的檔名放在 qmd 旁，再以內附執行器 `scripts/qmd_render.py` render 成 `report.html`（沙盒沒有 Quarto），並比對重跑與互動分析的 `metrics.csv`（不同時印「注意：」）；qmd 無法執行時改用 `report_html.render(ctx)` 直接產生並印「注意：」。結果資料夾另附 `report_qmd.zip`（不含原始資料與 `output/`）。qmd 內容：knitr 引擎；R chunk（include: false）安裝 reticulate（≥ 1.41）並以 `py_require` 指定與原分析相同版本的 Python 與套件；Python 設定 chunk（include: false）找資料（`data_candidates`：去掉 claude.ai 上傳時加的 8 碼十六進位前綴的名稱、原名，與各自的 zip／資料夾形式）；「分析流程」以 `main(argv)` 執行步驟 1–3、`evaluate(OUT)` 執行步驟 4（`output: false`，程式碼以 `code-fold` 摺疊）；之後依 `report_html.SECTIONS` 逐段以 `show(R.<段落>(ctx))` 輸出 ```` ```{=html} ```` 原始區塊（Quarto 的 asis 輸出會被 pandoc 重新解析，必須包在原始區塊中）。執行器只支援 report.qmd 用到的語法（見 `qmd_render.py` 說明），改 qmd 寫法時要同步。CSS 的深色模式只在執行器的頁面（`body.tc-page`）啟用，避免在 Quarto 淺色版面出現深色元件。已用 Quarto＋R＋reticulate 實際 render 驗證；測試以執行器 render 解壓後的 qmd，結果須與 report.html 相同。
@@ -70,7 +70,7 @@
 - **k-medoids**：自行實作於 `scripts/kmedoids.py`，不依賴 `kmedoids` 或 `scikit-learn-extra`（沙盒沒有）。已實作 k-medoids++ 初始化＋FasterPAM 交換（Schubert & Rousseeuw 2021），5 次初始化取總成本最低者；群編號依 medoid 文件索引排序。
 - **球面 k-means**：自行實作於 `scripts/spherical_kmeans.py`（Dhillon & Modha 2001）：依 cosine 相似度分配、中心為群內向量和再正規化為 1；k-means++ 初始化，5 次初始化取總 cosine 距離最小者；群編號依群內最小文件索引排序。不用 sklearn KMeans（它不會重新正規化中心，只是近似）。演算法統一介面在 `scripts/clustering.py`。
 - **階層式分群**：`scripts/hierarchical.py`，scipy `linkage(X, "ward")` 作用於單位向量（歐氏距離² = 2 − 2cos），連結法固定為 Ward（開發時比較：average 在 20NG 小群數時幾乎全併成一群、complete 分不開，Ward 群大小較均衡且 silhouette 最高）。樹建一次，以 `cut_tree` 依 k 切割；步驟 2 存 `linkage.npy` 並畫上限 k 的樹狀圖，以虛線標出各候選 k 的切割位置（`cut_positions`），檢查點 2 與指標一併呈現；步驟 3 印出 k 群的合併順序並畫樹狀圖；報告列出合併順序，並在「群數的選擇」放入以實線標出選定 k 的樹狀圖。不依合併距離自動推薦群數（等同手肘法）。
-- **事後比對**：`adjusted_rand_score`、`normalized_mutual_info_score`；純度自行計算（每群取多數標籤，加總後除以 n）。
+- **事後比對**：`adjusted_rand_score`；純度自行計算（每群取多數標籤，加總後除以 n）。
 
 ## 執行環境限制（重要）
 

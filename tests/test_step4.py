@@ -22,7 +22,7 @@ def test_purity():
 def test_external_metrics_perfect_and_permuted():
     y = np.array(["a", "a", "b", "b", "c", "c"])
     e = external_metrics(np.array([2, 2, 0, 0, 1, 1]), y)
-    assert e["ARI"] == pytest.approx(1) and e["NMI"] == pytest.approx(1) and e["純度"] == 1
+    assert e["ARI"] == pytest.approx(1) and e["純度"] == 1 and "NMI" not in e
 
 
 def _limits(**kw):
@@ -54,8 +54,8 @@ def test_with_labels(tmp_path, capsys):
     _pipeline(tmp_path, ["--dataset", "20ng"])
     assert not (tmp_path / "metrics.csv").exists()                # 指標只放在報告中
     m = pd.read_csv(tmp_path / "work" / "step4" / "metrics.csv", encoding="utf-8-sig")
-    assert {"silhouette", "NPMI", "ARI", "NMI", "純度"} <= set(m["指標"])
-    assert (m["範圍"] == "整體").sum() == 5
+    assert {"silhouette", "NPMI", "ARI", "純度"} <= set(m["指標"]) and "NMI" not in set(m["指標"])
+    assert (m["範圍"] == "整體").sum() == 4
     report = (tmp_path / "kmedoids_k4" / "report.html").read_text(encoding="utf-8")
     assert "ARI" in report and "交叉表" in report and "<dt>隨機種子</dt><dd>42" in report
     assert "名稱來源" in report
@@ -70,7 +70,7 @@ def test_without_labels(tmp_path):
     out = tmp_path / "out"
     _pipeline(out, ["--input", str(f), "--text-col", "內容"])
     m = pd.read_csv(out / "work" / "step4" / "metrics.csv", encoding="utf-8-sig")
-    assert not {"ARI", "NMI", "純度"} & set(m["指標"])
+    assert not {"ARI", "純度"} & set(m["指標"])
     assert "略過事後比對" in (out / "kmedoids_k4" / "report.html").read_text(encoding="utf-8")
 
 

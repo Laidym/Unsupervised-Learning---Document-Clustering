@@ -1,7 +1,7 @@
 """步驟 4　評估與限制。
 
 內部指標（固定）：silhouette、關鍵詞一致性 NPMI。
-事後比對（自動）：步驟 1 有指定標籤欄才計算 ARI、NMI、純度；否則略過。標籤只在本步驟讀取。
+事後比對（自動）：步驟 1 有指定標籤欄才計算 ARI、純度；否則略過。標籤只在本步驟讀取。
 限制：固定說明四項，並依本次資料提示。
 文字雲：所有群畫在同一張圖上（scripts/wordcloud.py）；只放在 HTML 報告。
 報告：先寫出原始檔 report.qmd（scripts/report_qmd.py），再 render 成 report.html（scripts/qmd_render.py）；
@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
+from sklearn.metrics import adjusted_rand_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import DEFAULT_OUT, load_json, record_command, result_dir, setup_stdout, work_dir  # noqa: E402
@@ -57,7 +57,6 @@ def purity(clusters, labels):
 def external_metrics(clusters, labels):
     return {
         "ARI": float(adjusted_rand_score(labels, clusters)),
-        "NMI": float(normalized_mutual_info_score(labels, clusters)),
         "純度": purity(clusters, labels),
     }
 
@@ -210,8 +209,7 @@ def build_report(ctx):
     else:
         e = ctx["external"]
         L += [f"- ARI：{e['ARI']:.3f}（1 為完全一致，0 相當於隨機分群）",
-              f"- NMI：{e['NMI']:.3f}（0 為毫無關聯，1 為完全對應）",
-              f"- 純度：{e['純度']:.3f}（群數越多越高，須搭配 ARI、NMI 解讀）",
+              f"- 純度：{e['純度']:.3f}（群數越多越高，須搭配 ARI 解讀）",
               f"- 群數 {ctx['k']}，標籤類別數 {ctx['n_classes']}",
               "", "群與標籤的交叉表（含合計，轉述時直接引用表中數字）：", "",
               _md_table(with_totals(ctx["crosstab"]).reset_index()), "",
