@@ -12,7 +12,7 @@ Claude 依關鍵詞為每群提出建議名稱，使用者逐群採用或自訂�
 
 輸出寫在 <out>/<演算法>_k<k>/（不同演算法或群數的結果分開保存，同一組合重跑時覆寫）：
 clusters.csv（依群排序，同群文件相鄰；群內維持原始順序）。
-輸入為 .txt 資料夾或 zip 時，另寫出 clusters_files.zip：每群一個資料夾，放入該群的文件。
+輸入為 .txt 資料夾或 zip 時，改寫出 clusters_files.zip（每群一個資料夾，放入該群的文件），不輸出 clusters.csv。
 """
 import argparse
 import json
@@ -179,17 +179,19 @@ def main(argv=None):
 
     clusters = sorted_clusters(docs, labels, names)
     rd = result_dir(out, load_json(s2 / "config.json")["algorithm"], args.k)
-    clusters.to_csv(rd / "clusters.csv", index=False, encoding="utf-8-sig")
-    written = [rd / "clusters.csv"]
     for f in OLD_OUTPUTS:
         if (out / f).exists():
             (out / f).unlink()
-    zpath = rd / FILES_ZIP
-    if load_json(s1 / "config.json").get("input_kind") == "files":
-        write_files_zip(clusters, zpath)
-        written.append(zpath)
-    elif zpath.exists():
-        zpath.unlink()
+    # .txt 資料夾或 zip 輸入只輸出依群分資料夾的 zip；表格輸入只輸出 clusters.csv。另一種舊檔一併移除
+    files_input = load_json(s1 / "config.json").get("input_kind") == "files"
+    path, stale = (rd / FILES_ZIP, rd / "clusters.csv") if files_input else (rd / "clusters.csv", rd / FILES_ZIP)
+    if files_input:
+        write_files_zip(clusters, path)
+    else:
+        clusters.to_csv(path, index=False, encoding="utf-8-sig")
+    if stale.exists():
+        stale.unlink()
+    written = [path]
 
     record_command(args.out, "step3", __file__, argv)
     print()

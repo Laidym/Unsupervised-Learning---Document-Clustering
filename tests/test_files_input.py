@@ -67,12 +67,13 @@ def test_pipeline_exports_cluster_folders(tmp_path, as_zip):
     step3_main(["--k", "4", "--names", "甲 乙", "乙/丙", "丙", "丁", "--out", str(out)])
     step4_main(["--out", str(out)])
 
-    clusters = pd.read_csv(out / "kmedoids_k4" / "clusters.csv", encoding="utf-8-sig", dtype={"doc_id": str})
-    with zipfile.ZipFile(out / "kmedoids_k4" / "clusters_files.zip") as z:
+    rd = out / "kmedoids_k4"
+    assert not (rd / "clusters.csv").exists()                  # 文字檔輸入不輸出 CSV
+    docs = read_table(folder).set_index("doc_id")["text"]
+    with zipfile.ZipFile(rd / "clusters_files.zip") as z:
         names = z.namelist()
-        assert len(names) == len(clusters)
+        assert len(names) == len(docs)
         assert {n.split("/")[0] for n in names} == {"0_甲_乙", "1_乙_丙", "2_丙", "3_丁"}
-        first = clusters.iloc[0]
-        member = f"0_甲_乙/{first['doc_id'].replace('/', '__')}"
-        assert z.read(member).decode("utf-8") == first["text"]
-    assert "ARI" in (out / "kmedoids_k4" / "report.html").read_text(encoding="utf-8")
+        doc_id = names[0].split("/", 1)[1].replace("__", "/")
+        assert z.read(names[0]).decode("utf-8") == docs[doc_id]
+    assert "ARI" in (rd / "report.html").read_text(encoding="utf-8")

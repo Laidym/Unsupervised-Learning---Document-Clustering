@@ -6085,8 +6085,9 @@ H(V) = -\sum_j \frac{b_j}{n} \ln \frac{b_j}{n},
 <p>每次分析的結果依演算法與群數放在各自的資料夾（如 <code>kmedoids_k8/</code>、<code>hierarchical_k5/</code>），換演算法或群數再做一次時，之前的結果會保留，方便對照；同一演算法與群數重做時會覆寫。</p>
 <pre class="text"><code>kmedoids_k8/
 ├── report.html          分析報告：各群名稱、文件數與關鍵詞，評估指標、圖表、限制、文字雲、設定紀錄；依步驟分段，各步驟附執行指令與完整程式碼
-├── clusters.csv         doc_id, text, cluster, 群名稱（依群排序，同群文件相鄰；群內維持原始順序）
-└── clusters_files.zip   僅限 .txt 輸入：每群一個資料夾（群編號_群名稱），放入該群的文件</code></pre>
+├── clusters.csv         表格輸入（CSV、Excel）：doc_id, text, cluster, 群名稱（依群排序，同群文件相鄰；群內維持原始順序）
+└── clusters_files.zip   .txt 資料夾或 zip 輸入：每群一個資料夾（群編號_群名稱），放入該群的文件</code></pre>
+<p>兩種結果檔只會有一種：上傳表格得到 <code>clusters.csv</code>；上傳 .txt 檔得到 <code>clusters_files.zip</code>，不另外輸出 CSV。</p>
 <p>各群摘要與評估指標都在 <code>report.html</code> 中，不另外輸出 CSV。</p>
 <p>報告最後（設定紀錄之前）附一張涵蓋所有群的文字雲，用來看各群之間的關聯：</p>
 <ul>
