@@ -5610,11 +5610,11 @@ flowchart TD
 </tr>
 <tr class="even">
 <td>加權</td>
-<td>TF-IDF (Salton and Buckley 1988)</td>
+<td>TF-IDF（term frequency–inverse document frequency，詞頻–逆文件頻率）(Salton and Buckley 1988)</td>
 </tr>
 <tr class="odd">
 <td>降維與正規化</td>
-<td>Truncated SVD 降至 100 維 (Deerwester et al. 1990)，再將向量長度正規化為 1</td>
+<td>Truncated SVD（truncated singular value decomposition，截斷奇異值分解）降至 100 維 (Deerwester et al. 1990)，再將向量長度正規化為 1</td>
 </tr>
 <tr class="even">
 <td>主要語言</td>
@@ -5711,7 +5711,7 @@ min_df = 2、max_df = 0.95 <strong>（文件數 &lt; 1,000 時建議）</strong>
 </tbody>
 </table>
 <p>中英文使用同一套斷詞流程：jieba 只處理中文字段，其餘文字的切分規則與純英文資料相同，因此純英文資料的結果不受影響，而夾雜英文術語或文獻引用的中文資料，中文部分也一定會被斷詞，不會因語言判斷而走錯流程。中文捨棄單字詞，是因為單字多為虛詞或量詞（如「的」「很」「個」），保留下來雜訊大於資訊。英文的清理與切詞規則是為了排除不帶主題意義的片段：email 與主機名稱切開後會留下 <code>edu</code>、<code>com</code> 等詞，Usenet 群組名稱（20 Newsgroups 文中常見）切開後會留下 <code>news</code>、<code>answers</code> 等詞，且等於洩漏類別名稱；年份與版本號等數字也很少有助於區分主題。</p>
-<p>min_df 為整數時代表最少出現篇數，max_df 為小數時代表最多出現比例；兩者皆以「出現在幾篇文件中」計算，而非出現次數。SVD 降至 100 維為經驗值，與 scikit-learn 官方文件分群範例相同 (<span class="nocase">scikit-learn developers</span>, n.d.)；LSA 文獻中常用數百維 (Landauer and Dumais 1997)。SVD 能取的成分數不超過矩陣的列數與行數，因此實際維度為 <span class="math inline">\(\min(100,\ n-1,\ m-1)\)</span>，<span class="math inline">\(n\)</span> 為文件數、<span class="math inline">\(m\)</span> 為篩選後的詞彙量；文件數或詞彙量不足時自動調低。</p>
+<p>min_df 為整數時代表最少出現篇數，max_df 為小數時代表最多出現比例；兩者皆以「出現在幾篇文件中」計算，而非出現次數。SVD 降至 100 維為經驗值，與 scikit-learn 官方文件分群範例相同 (<span class="nocase">scikit-learn developers</span>, n.d.)；LSA（latent semantic analysis，潛在語意分析）文獻中常用數百維 (Landauer and Dumais 1997)。SVD 能取的成分數不超過矩陣的列數與行數，因此實際維度為 <span class="math inline">\(\min(100,\ n-1,\ m-1)\)</span>，<span class="math inline">\(n\)</span> 為文件數、<span class="math inline">\(m\)</span> 為篩選後的詞彙量；文件數或詞彙量不足時自動調低。</p>
 <div class="callout callout-style-default callout-note callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -5829,7 +5829,7 @@ k-medoids <strong>（文件數 ≤ 5,000 時建議）</strong>
 </tr>
 </tbody>
 </table>
-<p><strong>演算法建議的門檻 5,000 篇為經驗值，並非出自文獻。</strong> 文獻指出的是 k-medoids 的記憶體與計算時間都隨文件數平方成長，全部文件兩兩距離的矩陣是主要瓶頸，大量資料應改用抽樣或其他方法 (Schubert and Rousseeuw 2021)，但沒有給出固定的切換篇數。以本 skill 的實作在模擬資料上實測（每個 <span class="math inline">\(k\)</span> 5 次初始化，候選群數 <span class="math inline">\(k = 2\)</span> 至 15）：5,000 篇時距離矩陣約 100 MB，評估全部候選群數約 4 分鐘；10,000 篇時增為 400 MB、約 22 分鐘，時間約為 4 倍以上。門檻取在等待時間仍適合逐步互動的範圍內。文件數超過門檻時仍可選用 k-medoids，skill 會提示需要較多記憶體與時間。</p>
+<p><strong>演算法建議的門檻 5,000 篇為經驗值，並非出自文獻。</strong> 文獻指出的是 k-medoids 的記憶體與計算時間都隨文件數平方成長，全部文件兩兩距離的矩陣是主要瓶頸，大量資料應改用抽樣或其他方法 (Schubert and Rousseeuw 2021)，但沒有給出固定的切換篇數。以本 skill 的實作在模擬資料上實測（每個 <span class="math inline">\(k\)</span> 5 次初始化，候選群數 <span class="math inline">\(k = 2\)</span> 至 15）：5,000 篇時距離矩陣約 100 MB（megabyte，百萬位元組），評估全部候選群數約 4 分鐘；10,000 篇時增為 400 MB、約 22 分鐘，時間約為 4 倍以上。門檻取在等待時間仍適合逐步互動的範圍內。文件數超過門檻時仍可選用 k-medoids，skill 會提示需要較多記憶體與時間。</p>
 <p><strong>候選群數範圍</strong>預設為 <span class="math inline">\(k = 2\)</span> 至 <span class="math inline">\(\min(15,\ \lfloor n/30 \rfloor)\)</span>，<span class="math inline">\(n\)</span> 為文件數，使用者可自訂：</p>
 <ul>
 <li>下限 2：群數 1 不構成分群，silhouette 係數亦無法計算。</li>
@@ -5857,7 +5857,7 @@ k-medoids <strong>（文件數 ≤ 5,000 時建議）</strong>
 </section>
 <section id="步驟-3-群關鍵詞" class="level2">
 <h2 class="anchored" data-anchor-id="步驟-3-群關鍵詞">步驟 3　群關鍵詞</h2>
-<p>以 c-TF-IDF (Grootendorst 2022) 為每一群萃取最具代表性的 10 個關鍵詞，作為使用者為各群命名的依據。c-TF-IDF 突顯「此群有、其他群少見」的詞，適合用於區分與命名各群；其限制是群的文件數差異很大時，小群的關鍵詞較不穩定。</p>
+<p>以 c-TF-IDF（class-based TF-IDF，以群為單位的 TF-IDF）(Grootendorst 2022) 為每一群萃取最具代表性的 10 個關鍵詞，作為使用者為各群命名的依據。c-TF-IDF 突顯「此群有、其他群少見」的詞，適合用於區分與命名各群；其限制是群的文件數差異很大時，小群的關鍵詞較不穩定。</p>
 <div class="callout callout-style-default callout-tip callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -5895,13 +5895,13 @@ k-medoids <strong>（文件數 ≤ 5,000 時建議）</strong>
 <td>範圍 −1 至 1。文字資料數值通常偏低，宜比較不同群數的相對高低</td>
 </tr>
 <tr class="even">
-<td>關鍵詞一致性（NPMI）(Newman et al. 2010; Bouma 2009)</td>
+<td>關鍵詞一致性（NPMI，normalized pointwise mutual information，正規化點互資訊）(Newman et al. 2010; Bouma 2009)</td>
 <td>各群關鍵詞兩兩計算「實際共同出現於同一文件的頻率」相對於「彼此獨立時的預期頻率」，正規化後取平均</td>
 <td>範圍 −1 至 1。越高表示關鍵詞語意越連貫、越容易命名</td>
 </tr>
 </tbody>
 </table>
-<p><strong>事後比對</strong>（自動執行）：若步驟 1 指定了標籤欄位，skill 以 ARI (Hubert and Arabie 1985)、NMI (Strehl and Ghosh 2002) 與純度 (Manning, Raghavan, and Schütze 2008) 量化分群與既有分類的吻合程度；未指定則略過。既有分類只是一種分法，不吻合不代表分群錯誤。</p>
+<p><strong>事後比對</strong>（自動執行）：若步驟 1 指定了標籤欄位，skill 以 ARI（adjusted Rand index，調整蘭德指數）(Hubert and Arabie 1985)、NMI（normalized mutual information，正規化互資訊）(Strehl and Ghosh 2002) 與純度 (Manning, Raghavan, and Schütze 2008) 量化分群與既有分類的吻合程度；未指定則略過。既有分類只是一種分法，不吻合不代表分群錯誤。</p>
 <div class="callout callout-style-default callout-important callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -5934,7 +5934,7 @@ k-medoids <strong>（文件數 ≤ 5,000 時建議）</strong>
 \text{tfidf}(t,d) = \text{tf}(t,d) \times \left( \ln\frac{1+n}{1+\text{df}(t)} + 1 \right),
 \]</span></p>
 <p>其中 <span class="math inline">\(\text{tf}(t,d)\)</span> 為詞 <span class="math inline">\(t\)</span> 在文件 <span class="math inline">\(d\)</span> 的出現次數，<span class="math inline">\(\text{df}(t)\)</span> 為含有詞 <span class="math inline">\(t\)</span> 的文件數；每篇文件的向量再除以其長度，使長度為 1。<em>流程角色：步驟 1，將文件轉為數值向量。</em></p>
-<p><strong>Truncated SVD（潛在語意分析）</strong>　完整的 SVD 將矩陣拆解為所有成分，可完全還原原矩陣；Truncated SVD 只計算並保留最重要的前 <span class="math inline">\(k\)</span> 個成分，是以 <span class="math inline">\(k\)</span> 個方向對原矩陣的最佳近似。經常一起出現的詞會被合併到相同方向，因此能部分處理同義用詞並濾除雜訊。它不需先扣除平均值，可直接處理稀疏的文字矩陣，可視為適用於文字資料的 PCA (Deerwester et al. 1990)。<em>流程角色：步驟 1，產生用於分群的低維向量。</em></p>
+<p><strong>Truncated SVD（潛在語意分析）</strong>　完整的 SVD 將矩陣拆解為所有成分，可完全還原原矩陣；Truncated SVD 只計算並保留最重要的前 <span class="math inline">\(k\)</span> 個成分，是以 <span class="math inline">\(k\)</span> 個方向對原矩陣的最佳近似。經常一起出現的詞會被合併到相同方向，因此能部分處理同義用詞並濾除雜訊。它不需先扣除平均值，可直接處理稀疏的文字矩陣，可視為適用於文字資料的 PCA（principal component analysis，主成分分析）(Deerwester et al. 1990)。<em>流程角色：步驟 1，產生用於分群的低維向量。</em></p>
 </section>
 <section id="分群" class="level2">
 <h2 class="anchored" data-anchor-id="分群">分群</h2>
@@ -5957,7 +5957,7 @@ W_{t,c} = \text{tf}_{t,c} \times \ln\!\left(1 + \frac{A}{f_t}\right),
 s(i) = \frac{b(i) - a(i)}{\max\{a(i),\, b(i)\}}, \qquad S = \frac{1}{n}\sum_{i=1}^{n} s(i).
 \]</span></p>
 <p>只有一篇文件的群，其 <span class="math inline">\(s(i)\)</span> 記為 0。<em>流程角色：步驟 2 比較候選群數；步驟 4 內部指標。</em></p>
-<p><strong>PMI 與 NPMI</strong>　點互資訊（PMI）衡量兩個詞「實際共同出現的機率」比「彼此無關時預期共同出現的機率」高出多少：大於 0 表示兩詞常結伴出現，等於 0 表示彼此無關。PMI 沒有固定範圍，正規化點互資訊（NPMI）將其調整到 −1 至 1：1 表示兩詞總是一起出現，0 表示無關，−1 表示從不一起出現 (Bouma 2009)。一群關鍵詞兩兩 NPMI 的平均越高，代表這組詞描述的是同一件事，也越容易被人理解 (Newman et al. 2010)。機率以本次語料估計：<span class="math inline">\(p(w_i)\)</span> 為含有詞 <span class="math inline">\(w_i\)</span> 的文件比例，<span class="math inline">\(p(w_i, w_j)\)</span> 為同時含有兩詞的文件比例。</p>
+<p><strong>PMI 與 NPMI</strong>　點互資訊（PMI，pointwise mutual information）衡量兩個詞「實際共同出現的機率」比「彼此無關時預期共同出現的機率」高出多少：大於 0 表示兩詞常結伴出現，等於 0 表示彼此無關。PMI 沒有固定範圍，正規化點互資訊（NPMI）將其調整到 −1 至 1：1 表示兩詞總是一起出現，0 表示無關，−1 表示從不一起出現 (Bouma 2009)。一群關鍵詞兩兩 NPMI 的平均越高，代表這組詞描述的是同一件事，也越容易被人理解 (Newman et al. 2010)。機率以本次語料估計：<span class="math inline">\(p(w_i)\)</span> 為含有詞 <span class="math inline">\(w_i\)</span> 的文件比例，<span class="math inline">\(p(w_i, w_j)\)</span> 為同時含有兩詞的文件比例。</p>
 <p><span class="math display">\[
 \text{PMI}(w_i, w_j) = \ln \frac{p(w_i, w_j)}{p(w_i)\, p(w_j)}, \qquad
 \text{NPMI}(w_i, w_j) = \frac{\text{PMI}(w_i, w_j)}{-\ln p(w_i, w_j)}.
